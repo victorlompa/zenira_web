@@ -1,4 +1,5 @@
 import { createModel, type KaldiRecognizer, type Model } from "vosk-browser";
+import { buildVoskVocabulary } from "../../../src/commands.ts";
 import type { Language, SpeechRecognizer } from "../../../src/types.ts";
 import { getSharedAudioSource } from "../audioGraph.ts";
 
@@ -53,7 +54,13 @@ export class VoskSpeechRecognizer implements SpeechRecognizer {
     // creating our own — see audioGraph.ts for why running a second,
     // independent AudioContext against the same track is unreliable.
     const { context: audioContext, source } = getSharedAudioSource(stream);
-    const recognizer = new model.KaldiRecognizer(audioContext.sampleRate);
+    // Constrain the decoder to the demo's own command vocabulary instead of
+    // open-vocabulary transcription — dramatically improves accuracy for a
+    // fixed command set, at the cost of Vosk being unable to transcribe
+    // anything outside it (which is fine here: unrecognized speech should
+    // come back as "unknown" anyway).
+    const grammar = JSON.stringify(buildVoskVocabulary(this.language));
+    const recognizer = new model.KaldiRecognizer(audioContext.sampleRate, grammar);
     recognizer.setWords(true);
     recognizer.on("partialresult", (message) => {
       if (message.event === "partialresult") onPartial(message.result.partial);

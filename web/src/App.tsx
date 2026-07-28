@@ -1,10 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { applyCommand, INITIAL_BOAT_STATE, type BoatState } from "../../src/boatState.ts";
 import { ZeniraPipeline } from "../../src/pipeline.ts";
-import type { Language, PipelineState } from "../../src/types.ts";
+import type { Intent, Language, PipelineState } from "../../src/types.ts";
 import { AudioLevelMeter } from "./AudioLevelMeter.tsx";
 import { releaseSharedAudioSource } from "./audioGraph.ts";
+import { BoatPanel } from "./BoatPanel.tsx";
+import { CommandHistory, type HistoryEntry } from "./CommandHistory.tsx";
+import { CommandLibrary } from "./CommandLibrary.tsx";
 import { createWakeWordDetector, createSpeechRecognizer, usingRealWakeWord, usingRealSpeechRecognizer } from "./engines";
+import { describeFeedback } from "./feedback.ts";
 import { STRINGS } from "./i18n.ts";
+import { InfoPopover } from "./InfoPopover.tsx";
+import { useTelemetry } from "./useTelemetry.ts";
+
+type Tab = "library" | "zenira" | "history";
+
+const MAX_HISTORY_ENTRIES = 25;
 
 // vosk-browser's own recommended constraints: mono, 16kHz (its models are
 // trained at that rate — capturing at it avoids relying on the browser's
@@ -42,7 +53,24 @@ export default function App() {
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [micDeviceId, setMicDeviceId] = useState(() => localStorage.getItem("zenira-mic-device") ?? "");
+  const [tab, setTab] = useState<Tab>("zenira");
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [boat, setBoat] = useState<BoatState>(INITIAL_BOAT_STATE);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const lastLoggedResult = useRef<{ transcript: string; intent: Intent } | undefined>(undefined);
   const t = STRINGS[language];
+  const telemetry = useTelemetry(boat.motorOn, boat.speed);
+  // Read inside the intent-processing effect without making it re-run on
+  // every telemetry tick (it only cares about `state`, not the ambient
+  // battery/temperature random walk).
+  const telemetryRef = useRef(telemetry);
+  useEffect(() => {
+    telemetryRef.current = telemetry;
+  }, [telemetry]);
+  const boatRef = useRef(boat);
+  useEffect(() => {
+    boatRef.current = boat;
+  }, [boat]);
 
   async function refreshMicDevices() {
     const all = await navigator.mediaDevices.enumerateDevices();
@@ -72,11 +100,32 @@ export default function App() {
   // different model, so it can only happen while idle. The same picker
   // also drives the UI's own language, not just which model gets loaded.
   const pipeline = useMemo(
-    () => new ZeniraPipeline(createWakeWordDetector(), createSpeechRecognizer(language)),
+    () => new ZeniraPipeline(createWakeWordDetector(), createSpeechRecognizer(language), language),
     [language],
   );
 
   useEffect(() => pipeline.onStateChange(setState), [pipeline]);
+  useEffect(() => {
+    if (state.status !== "listening" || !state.lastResult) return;
+    if (state.lastResult === lastLoggedResult.current) return;
+    lastLoggedResult.current = state.lastResult;
+    const { transcript, intent } = state.lastResult;
+    // Computed once, outside of any state-updater callback: React (in
+    // StrictMode especially) may invoke an updater function more than
+    // once, so calling setFeedback from inside setBoat's updater was
+    // unreliable — sometimes leaving Output showing a stale message
+    // instead of "Comando não reconhecido" for a genuinely new, invalid
+    // command.
+    const result = applyCommand(boatRef.current, intent.name, transcript, language);
+    setBoat(result.state);
+    setFeedback(describeFeedback(result.feedback, telemetryRef.current, t));
+    setHistory((prev) =>
+      [
+        { id: `${Date.now()}-${prev.length}`, time: new Date().toLocaleTimeString(), transcript, intentName: intent.name },
+        ...prev,
+      ].slice(0, MAX_HISTORY_ENTRIES),
+    );
+  }, [state, t, language]);
   useEffect(
     () => () => {
       if (!micStream) return;
@@ -88,6 +137,7 @@ export default function App() {
 
   async function handleArm() {
     setError(null);
+    setFeedback(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia(micConstraints(micDeviceId));
       setMicStream(stream);
@@ -100,6 +150,7 @@ export default function App() {
 
   function handleDisarm() {
     pipeline.disarm();
+    setFeedback(null);
     // Only stop the tracks here; releasing the shared AudioContext is left
     // to the [micStream] effect's cleanup below. That cleanup runs after
     // AudioLevelMeter has unmounted (React tears down child effects before
@@ -115,7 +166,17 @@ export default function App() {
   }
 
   return (
-    <main className="page">
+    <div className="layout" data-active={tab}>
+      <CommandLibrary
+        className="panel--library"
+        title={t.libraryTitle}
+        hint={t.infoLibrary}
+        infoLabel={t.infoLabel}
+        categoryLabel={t.categoryLabel}
+        language={language}
+      />
+
+      <main className="page">
       <div className="shell">
         <header className="shell__header">
           <span className="shell__logo">Zenira</span>
@@ -149,11 +210,22 @@ export default function App() {
           <span className={`status-pill status-pill--${state.status}`}>{t.status[state.status]}</span>
         </p>
 
-        {micStream && <AudioLevelMeter stream={micStream} label={t.micLabel} noTrackWarning={t.micNoTrack} />}
+        {micStream && (
+          <AudioLevelMeter
+            stream={micStream}
+            label={t.micLabel}
+            noTrackWarning={t.micNoTrack}
+            infoText={t.infoMic}
+            infoLabel={t.infoLabel}
+          />
+        )}
 
         {state.status === "armed" && state.wakeWordScores && (
           <div className="card">
-            <p className="card__label">{t.wakeWordScoresLabel}</p>
+            <div className="card__header">
+              <p className="card__label">{t.wakeWordScoresLabel}</p>
+              <InfoPopover text={t.infoWakeWordScores} label={t.infoLabel} />
+            </div>
             {state.wakeWordScores.map((score) => (
               <div className="scorebar" key={score.label}>
                 <div className="scorebar__row">
@@ -205,22 +277,33 @@ export default function App() {
           </>
         )}
 
-        <div className="card">
-          <p className="card__label">{t.transcriptLabel}</p>
-          <p className="card__body">
-            {state.status === "listening" ? (
-              state.partialTranscript || "…"
-            ) : (
-              <span className="card__placeholder">
-                {state.status === "idle" ? t.idlePlaceholder : t.transcriptPlaceholder}
-              </span>
-            )}
-          </p>
-          {state.status === "listening" && state.lastResult && (
-            <p className="card__result">
-              "{state.lastResult.transcript}" → <strong>{state.lastResult.intent.name}</strong>
+        {state.status !== "armed" && (
+          <div className="card">
+            <div className="card__header">
+              <p className="card__label">{t.transcriptLabel}</p>
+              <InfoPopover text={t.infoTranscript} label={t.infoLabel} />
+            </div>
+            <p className="card__body">
+              {state.status === "listening" ? (
+                state.partialTranscript || "…"
+              ) : (
+                <span className="card__placeholder">{t.idlePlaceholder}</span>
+              )}
             </p>
-          )}
+            {state.status === "listening" && state.lastResult && (
+              <p className="card__result">
+                "{state.lastResult.transcript}" → <strong>{state.lastResult.intent.name}</strong>
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="card">
+          <div className="card__header">
+            <p className="card__label">{t.outputLabel}</p>
+            <InfoPopover text={t.infoOutput} label={t.infoLabel} />
+          </div>
+          <p className="card__body">{feedback ?? <span className="card__placeholder">{t.outputPlaceholder}</span>}</p>
         </div>
 
         {error && (
@@ -243,6 +326,80 @@ export default function App() {
           {state.status === "idle" ? t.idleNote : t.note(usingRealWakeWord, usingRealSpeechRecognizer, language)}
         </p>
       </div>
-    </main>
+      </main>
+
+      <div className="side-column">
+        <BoatPanel
+          className="panel--boat"
+          title={t.boatTitle}
+          state={boat}
+          telemetry={telemetry}
+          boatSpeedLabel={t.boatSpeedLabel}
+          boatBoatLabel={t.boatBoatLabel}
+          boatMotorLabel={t.boatMotorLabel}
+          boatOn={t.boatOn}
+          boatOff={t.boatOff}
+          boatRudderLabel={t.boatRudderLabel}
+          boatLeft={t.boatLeft}
+          boatCenter={t.boatCenter}
+          boatRight={t.boatRight}
+          boatBatteryLabel={t.boatBatteryLabel}
+          boatCurrentLabel={t.boatCurrentLabel}
+        />
+
+        <CommandHistory
+          className="panel--history"
+          title={t.historyTitle}
+          emptyLabel={t.historyEmpty}
+          unknownLabel={t.historyUnknown}
+          entries={history}
+        />
+      </div>
+
+      <nav className="tabbar">
+        <button
+          type="button"
+          className={`tabbar__btn ${tab === "library" ? "tabbar__btn--active" : ""}`}
+          onClick={() => setTab("library")}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 10 20H5.5A1.5 1.5 0 0 1 4 18.5v-13ZM12.5 5.5A1.5 1.5 0 0 1 14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14a1.5 1.5 0 0 1-1.5-1.5v-13Z"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinejoin="round"
+            />
+          </svg>
+          {t.tabLibrary}
+        </button>
+        <button
+          type="button"
+          className={`tabbar__btn ${tab === "zenira" ? "tabbar__btn--active" : ""}`}
+          onClick={() => setTab("zenira")}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.6" />
+            <path
+              d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21m-3 0h6"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+          {t.tabZenira}
+        </button>
+        <button
+          type="button"
+          className={`tabbar__btn ${tab === "history" ? "tabbar__btn--active" : ""}`}
+          onClick={() => setTab("history")}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M12 7.5V12l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {t.tabHistory}
+        </button>
+      </nav>
+    </div>
   );
 }

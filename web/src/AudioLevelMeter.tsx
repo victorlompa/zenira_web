@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getSharedAudioSource } from "./audioGraph.ts";
+import { InfoPopover } from "./InfoPopover.tsx";
 
 /**
  * Draws a live waveform from the raw microphone stream — independent of
@@ -10,9 +11,11 @@ interface AudioLevelMeterProps {
   stream: MediaStream | null;
   label: string;
   noTrackWarning: string;
+  infoText: string;
+  infoLabel: string;
 }
 
-export function AudioLevelMeter({ stream, label, noTrackWarning }: AudioLevelMeterProps) {
+export function AudioLevelMeter({ stream, label, noTrackWarning, infoText, infoLabel }: AudioLevelMeterProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [warning, setWarning] = useState<string | null>(null);
 
@@ -98,7 +101,10 @@ export function AudioLevelMeter({ stream, label, noTrackWarning }: AudioLevelMet
 
   return (
     <div className="card meter">
-      <p className="card__label">{label}</p>
+      <div className="card__header">
+        <p className="card__label">{label}</p>
+        <InfoPopover text={infoText} label={infoLabel} />
+      </div>
       <canvas ref={canvasRef} className="meter__canvas" />
       {warning && (
         <p className="alert" role="alert">
