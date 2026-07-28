@@ -1,5 +1,6 @@
 import { createModel, type KaldiRecognizer, type Model } from "vosk-browser";
 import type { Language, SpeechRecognizer } from "../../../src/types.ts";
+import { getSharedAudioSource } from "../audioGraph.ts";
 
 /**
  * Real speech-to-text engine, backed by Vosk running in the browser via
@@ -30,7 +31,6 @@ function loadModel(language: Language): Promise<Model> {
 }
 
 export class VoskSpeechRecognizer implements SpeechRecognizer {
-  private audioContext: AudioContext | null = null;
   private processor: ScriptProcessorNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
   private silence: GainNode | null = null;
@@ -49,7 +49,10 @@ export class VoskSpeechRecognizer implements SpeechRecognizer {
   ): Promise<void> {
     const model = await loadModel(this.language);
 
-    const audioContext = new AudioContext();
+    // Tap the stream's single shared AudioContext/source instead of
+    // creating our own — see audioGraph.ts for why running a second,
+    // independent AudioContext against the same track is unreliable.
+    const { context: audioContext, source } = getSharedAudioSource(stream);
     const recognizer = new model.KaldiRecognizer(audioContext.sampleRate);
     recognizer.setWords(true);
     recognizer.on("partialresult", (message) => {
@@ -59,7 +62,6 @@ export class VoskSpeechRecognizer implements SpeechRecognizer {
       if (message.event === "result") onFinal(message.result.text);
     });
 
-    const source = audioContext.createMediaStreamSource(stream);
     const processor = audioContext.createScriptProcessor(4096, 1, 1);
     processor.onaudioprocess = (event) => recognizer.acceptWaveform(event.inputBuffer);
 
@@ -71,7 +73,6 @@ export class VoskSpeechRecognizer implements SpeechRecognizer {
     processor.connect(silence);
     silence.connect(audioContext.destination);
 
-    this.audioContext = audioContext;
     this.source = source;
     this.processor = processor;
     this.silence = silence;
@@ -79,12 +80,18 @@ export class VoskSpeechRecognizer implements SpeechRecognizer {
   }
 
   stop(): void {
-    this.processor?.disconnect();
-    this.source?.disconnect();
-    this.silence?.disconnect();
+    // Disconnect only this instance's edge from the shared source node —
+    // never a bare disconnect(), which would also sever other consumers
+    // (the level meter) tapping the same stream. Wrapped in try/catch since
+    // the shared AudioContext may already be closed by the time this runs.
+    try {
+      if (this.source && this.processor) this.source.disconnect(this.processor);
+      this.processor?.disconnect();
+      this.silence?.disconnect();
+    } catch {
+      // already torn down
+    }
     this.recognizer?.remove();
-    void this.audioContext?.close();
-    this.audioContext = null;
     this.processor = null;
     this.source = null;
     this.silence = null;

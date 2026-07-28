@@ -24,20 +24,43 @@ thin web UI.
   (`web/src/engines/edgeImpulseWakeWord.ts`,
   `web/src/engines/voskRecognizer.ts`), switched independently by the
   `usingRealWakeWord` / `usingRealSpeechRecognizer` flags in
-  `web/src/engines/index.ts`.
+  `web/src/engines/index.ts`. Both are `true` — both real engines are
+  wired in. `web/src/audioGraph.ts` gives them (and the mic level meter)
+  a single shared `AudioContext`/`MediaStreamAudioSourceNode` per stream,
+  since handing each consumer its own was an actual source of "the mic
+  isn't being captured" bugs during development — see that file's
+  comments if you're adding a third audio consumer.
 
-Right now `usingRealWakeWord` is `false` (mocked wake-word timer) and
-`usingRealSpeechRecognizer` is `true` (real Vosk, see below). Each engine
-stub has a comment block with the exact steps to swap in the real thing.
+Wake word detection is manual-only right now (see `src/pipeline.ts`'s
+class comment) — arming doesn't start the detector automatically, a
+button triggers it. The detector itself still runs for real underneath;
+flipping that back to automatic just means calling `wakeWord.start()`
+again from `ZeniraPipeline.arm()`.
 
 ## Wiring in the real engines
 
-### Wake word (not done yet)
+### Wake word (done — Edge Impulse, MCV25's "Zenira" model)
 
-Export the trained impulse from Edge Impulse Studio with deployment
-target "WebAssembly", drop the build in `web/public/models/`, implement
-`EdgeImpulseWakeWordDetector` (`web/src/engines/edgeImpulseWakeWord.ts`),
-then flip `usingRealWakeWord` to `true` in `web/src/engines/index.ts`.
+`EdgeImpulseWakeWordDetector` (`web/src/engines/edgeImpulseWakeWord.ts`)
+loads the WASM classifier exported from Edge Impulse Studio. Two things
+to get right when re-exporting or swapping models:
+
+- In Studio's **Deployment** tab, the target must be **WebAssembly**
+  (plain, not the `[Browser, SIMD]` / `[Node, SIMD]` variants — those
+  need different glue). That target's zip contains a `browser/` folder
+  with `edge-impulse-standalone.js` + `.wasm` + `run-impulse.js` ready to
+  use as-is. The **C++ library** export (`edge-impulse-sdk/`,
+  `tflite-model/`, `trained.tflite`) is a different target entirely and
+  won't run in a browser without compiling it yourself.
+- Copy those three files into `web/public/models/edge-impulse/` (gitignored,
+  same as the Vosk models). `web/src/engines/edgeImpulseClassifier.ts`
+  loads them as classic `<script>` tags (the Emscripten output isn't an ES
+  module, so it can't be `import`ed through Vite).
+- `HOP_SAMPLES`, `WAKE_LABEL`, and `CONFIDENCE_THRESHOLD` in
+  `edgeImpulseWakeWord.ts` are read off the impulse's own
+  `deployment-metadata.json` (window/hop size in ms × 16kHz, the wake
+  word's class label, and the learn block's confidence threshold) — update
+  them if you retrain with different windowing or class names.
 
 ### Speech-to-text (done — Vosk, Portuguese + English)
 

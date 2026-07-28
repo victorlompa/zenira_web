@@ -8,7 +8,7 @@ import { VoskSpeechRecognizer } from "./voskRecognizer.ts";
  * implementation is ready (see the two files in this folder for exactly
  * what to drop in and where).
  */
-export const usingRealWakeWord = false;
+export const usingRealWakeWord = true;
 export const usingRealSpeechRecognizer = true;
 export const usingRealEngines = usingRealWakeWord && usingRealSpeechRecognizer;
 
