@@ -1,0 +1,16 @@
+{
+  "name": "zenira",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Browser demo of the Zenira voice-control pipeline (wake word + speech-to-text + command parsing) from the MCV25 project",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,54 @@
+:root {
+  color-scheme: dark;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", monospace;
+  background: #0b0b0c;
+  color: #e6e6e6;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zenira {
+  width: min(560px, 90vw);
+  padding: 2rem;
+  border: 1px solid #2a2a2c;
+  border-radius: 8px;
+}
+
+.zenira__status {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+
+.zenira__transcript {
+  min-height: 2.5em;
+  font-size: 1.1rem;
+}
+
+.zenira button {
+  font-family: inherit;
+  background: transparent;
+  border: 1px solid #4a4a4c;
+  color: inherit;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.zenira button:hover {
+  border-color: #8a8a8c;
+}
+
+.zenira__note {
+  margin-top: 1.5rem;
+  font-size: 0.8rem;
+  opacity: 0.6;
+  line-height: 1.4;
+}
