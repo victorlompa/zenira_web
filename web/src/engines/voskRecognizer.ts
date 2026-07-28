@@ -1,31 +1,93 @@
-import type { SpeechRecognizer } from "../../../src/types.ts";
+import { createModel, type KaldiRecognizer, type Model } from "vosk-browser";
+import type { Language, SpeechRecognizer } from "../../../src/types.ts";
 
 /**
  * Real speech-to-text engine, backed by Vosk running in the browser via
- * vosk-browser (Apache-2.0, WASM build of Vosk). NOT wired in yet — steps
- * to finish this:
+ * vosk-browser (Apache-2.0, WASM build of Vosk). Models are loaded from
+ * `web/public/models/<name>.tar.gz` — see README.md for how to build those
+ * from the small Vosk models published at https://alphacephei.com/vosk/models.
  *
- * 1. `npm install vosk-browser` in `web/`.
- * 2. Download the small model (~40MB, good enough for short commands and
- *    small enough to ship over the network) from
- *    https://alphacephei.com/vosk/models — e.g. `vosk-model-small-pt-0.3`
- *    for Portuguese. Unzip it into `web/public/models/vosk-small/`.
- * 3. Replace the body of `start()` below with vosk-browser's model loader
- *    (`createModel("/models/vosk-small")`) and a recognizer fed by a
- *    `MediaStreamAudioSourceNode` from `stream`; forward its `partialresult`
- *    / `result` worker messages to `onPartial` / `onFinal`.
- * 4. Flip `usingRealEngines` in `./index.ts` to `true`.
- *
- * Note: the large/full Vosk models (~1.8GB) aren't practical to ship to a
- * browser — if higher accuracy than the small model is needed, that has to
- * run server-side behind a small API instead of in-browser.
+ * Only the "small" models are practical to ship to a browser (tens of MB);
+ * the large/full models (~1.8GB) would have to run server-side instead.
  */
+const MODEL_URLS: Record<Language, string> = {
+  pt: "/models/vosk-model-small-pt-0.3.tar.gz",
+  en: "/models/vosk-model-small-en-us-0.15.tar.gz",
+};
+
+// Loading a model spins up a Web Worker and can take a few seconds; cache by
+// language so switching back to a previously used language is instant and
+// arming/disarming repeatedly doesn't reload it each time.
+const modelCache = new Map<Language, Promise<Model>>();
+
+function loadModel(language: Language): Promise<Model> {
+  let model = modelCache.get(language);
+  if (!model) {
+    model = createModel(MODEL_URLS[language]);
+    modelCache.set(language, model);
+  }
+  return model;
+}
+
 export class VoskSpeechRecognizer implements SpeechRecognizer {
-  start(_stream: MediaStream, _onPartial: (text: string) => void, _onFinal: (text: string) => void): void {
-    throw new Error("VoskSpeechRecognizer not wired in yet — see comments in this file.");
+  private audioContext: AudioContext | null = null;
+  private processor: ScriptProcessorNode | null = null;
+  private source: MediaStreamAudioSourceNode | null = null;
+  private silence: GainNode | null = null;
+  private recognizer: KaldiRecognizer | null = null;
+
+  constructor(private readonly language: Language) {}
+
+  start(stream: MediaStream, onPartial: (text: string) => void, onFinal: (text: string) => void): void {
+    void this.startAsync(stream, onPartial, onFinal);
+  }
+
+  private async startAsync(
+    stream: MediaStream,
+    onPartial: (text: string) => void,
+    onFinal: (text: string) => void,
+  ): Promise<void> {
+    const model = await loadModel(this.language);
+
+    const audioContext = new AudioContext();
+    const recognizer = new model.KaldiRecognizer(audioContext.sampleRate);
+    recognizer.setWords(true);
+    recognizer.on("partialresult", (message) => {
+      if (message.event === "partialresult") onPartial(message.result.partial);
+    });
+    recognizer.on("result", (message) => {
+      if (message.event === "result") onFinal(message.result.text);
+    });
+
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = (event) => recognizer.acceptWaveform(event.inputBuffer);
+
+    // Route through a muted gain node: Safari/Firefox only fire
+    // onaudioprocess once the ScriptProcessorNode reaches a destination.
+    const silence = audioContext.createGain();
+    silence.gain.value = 0;
+    source.connect(processor);
+    processor.connect(silence);
+    silence.connect(audioContext.destination);
+
+    this.audioContext = audioContext;
+    this.source = source;
+    this.processor = processor;
+    this.silence = silence;
+    this.recognizer = recognizer;
   }
 
   stop(): void {
-    // no-op until start() is implemented
+    this.processor?.disconnect();
+    this.source?.disconnect();
+    this.silence?.disconnect();
+    this.recognizer?.remove();
+    void this.audioContext?.close();
+    this.audioContext = null;
+    this.processor = null;
+    this.source = null;
+    this.silence = null;
+    this.recognizer = null;
   }
 }

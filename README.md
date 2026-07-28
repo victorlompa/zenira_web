@@ -22,29 +22,63 @@ thin web UI.
   access. It wires the pipeline to either the mocked engines
   (`src/mock/mockEngines.ts`) or the real ones
   (`web/src/engines/edgeImpulseWakeWord.ts`,
-  `web/src/engines/voskRecognizer.ts`), switched by the `usingRealEngines`
-  flag in `web/src/engines/index.ts`.
+  `web/src/engines/voskRecognizer.ts`), switched independently by the
+  `usingRealWakeWord` / `usingRealSpeechRecognizer` flags in
+  `web/src/engines/index.ts`.
 
-Right now `usingRealEngines` is `false` — the app runs today with mocked
-engines (a fake wake-word timer and a canned transcript) so the full flow
-is visible without any model files. Each engine stub has a comment block
-with the exact steps to swap in the real thing.
+Right now `usingRealWakeWord` is `false` (mocked wake-word timer) and
+`usingRealSpeechRecognizer` is `true` (real Vosk, see below). Each engine
+stub has a comment block with the exact steps to swap in the real thing.
 
 ## Wiring in the real engines
 
-1. **Wake word** — export the trained impulse from Edge Impulse Studio with
-   deployment target "WebAssembly", drop the build in
-   `web/public/models/`, and implement `EdgeImpulseWakeWordDetector`
-   (`web/src/engines/edgeImpulseWakeWord.ts`).
-2. **Speech-to-text** — `npm install vosk-browser` in `web/`, download the
-   small Vosk model (~40MB — the 1.8GB full model isn't practical for the
-   browser) into `web/public/models/`, and implement
-   `VoskSpeechRecognizer` (`web/src/engines/voskRecognizer.ts`).
-3. Flip `usingRealEngines` to `true` in `web/src/engines/index.ts`.
+### Wake word (not done yet)
 
-Once both are wired in, the whole pipeline — wake word detection and
-transcription — runs in the visitor's browser; no audio is sent to any
-server. Worth calling that out on the demo page itself.
+Export the trained impulse from Edge Impulse Studio with deployment
+target "WebAssembly", drop the build in `web/public/models/`, implement
+`EdgeImpulseWakeWordDetector` (`web/src/engines/edgeImpulseWakeWord.ts`),
+then flip `usingRealWakeWord` to `true` in `web/src/engines/index.ts`.
+
+### Speech-to-text (done — Vosk, Portuguese + English)
+
+`vosk-browser` is installed and `VoskSpeechRecognizer`
+(`web/src/engines/voskRecognizer.ts`) is wired in. A language picker in
+the UI lets the user choose PT or EN before arming — Vosk has no single
+bilingual model, so each language is a separate model loaded on demand
+and cached.
+
+`vosk-browser` expects each model as a gzipped tar archive of a directory
+named `model/` with the standard Kaldi layout (`model/am/final.mdl`,
+`model/conf/{mfcc,model}.conf`, `model/graph/...`, `model/ivector/...`).
+The models downloaded directly from
+[alphacephei.com/vosk/models](https://alphacephei.com/vosk/models) don't
+match that shape out of the box, so they need repackaging:
+
+```bash
+# vosk-model-small-en-us-0.15 already has the am/conf/graph/ivector
+# layout — just re-root it under a "model/" folder and tar it:
+mkdir -p build-en/model && cp -r vosk-model-small-en-us-0.15/* build-en/model/
+tar -czf vosk-model-small-en-us-0.15.tar.gz -C build-en model
+
+# vosk-model-small-pt-0.3 is an older, flat "Android" layout with no
+# conf/model.conf — reshuffle its files into am/conf/graph(/phones)/ivector
+# and hand-write conf/model.conf (silence-phones range comes from the
+# model's own phones.txt: SIL/SIL_*/GBG/GBG_* occupy ids 1-10).
+```
+
+The resulting `vosk-model-small-pt-0.3.tar.gz` and
+`vosk-model-small-en-us-0.15.tar.gz` (~30-40MB each) live in
+`web/public/models/`, gitignored (too large for the repo) — regenerate
+them with the steps above, or fetch pre-packaged copies, before running
+`npm run dev` / `npm run build` in `web/`. Only the small models are
+shipped; the 1.8GB full models aren't practical for the browser.
+
+### End state
+
+Once both engines are wired in, the whole pipeline — wake word detection
+and transcription — runs in the visitor's browser; no audio is sent to
+any server. Worth calling that out on the demo page itself (the app
+already does, in the status note under the transcript).
 
 ## Legal note
 

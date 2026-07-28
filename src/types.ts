@@ -17,6 +17,9 @@ export interface SpeechRecognizer {
   stop(): void;
 }
 
+/** Languages the demo can transcribe speech in. */
+export type Language = "pt" | "en";
+
 export type PipelineState =
   | { status: "idle" }
   | { status: "armed" }

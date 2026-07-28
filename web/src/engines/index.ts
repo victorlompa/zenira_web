@@ -1,18 +1,21 @@
 import { MockSpeechRecognizer, MockWakeWordDetector } from "../../../src/mock/mockEngines.ts";
-import type { SpeechRecognizer, WakeWordDetector } from "../../../src/types.ts";
+import type { Language, SpeechRecognizer, WakeWordDetector } from "../../../src/types.ts";
 import { EdgeImpulseWakeWordDetector } from "./edgeImpulseWakeWord.ts";
 import { VoskSpeechRecognizer } from "./voskRecognizer.ts";
 
 /**
- * Flip this once both real engines are wired in (see the two files in this
- * folder for exactly what to drop in and where).
+ * Each engine is wired in independently — flip its flag once its real
+ * implementation is ready (see the two files in this folder for exactly
+ * what to drop in and where).
  */
-export const usingRealEngines = false;
+export const usingRealWakeWord = false;
+export const usingRealSpeechRecognizer = true;
+export const usingRealEngines = usingRealWakeWord && usingRealSpeechRecognizer;
 
 export function createWakeWordDetector(): WakeWordDetector {
-  return usingRealEngines ? new EdgeImpulseWakeWordDetector() : new MockWakeWordDetector();
+  return usingRealWakeWord ? new EdgeImpulseWakeWordDetector() : new MockWakeWordDetector();
 }
 
-export function createSpeechRecognizer(): SpeechRecognizer {
-  return usingRealEngines ? new VoskSpeechRecognizer() : new MockSpeechRecognizer();
+export function createSpeechRecognizer(language: Language): SpeechRecognizer {
+  return usingRealSpeechRecognizer ? new VoskSpeechRecognizer(language) : new MockSpeechRecognizer();
 }
