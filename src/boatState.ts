@@ -20,7 +20,8 @@ export const INITIAL_BOAT_STATE: BoatState = { powered: false, motorOn: false, s
 const SPEED_DEFAULT_STEP = 10;
 const SPEED_MAX = 100;
 const RUDDER_DEFAULT_STEP = 10;
-const RUDDER_MAX = 90;
+/** Max rudder angle in either direction — also the gauge's visual scale in `BoatPanel.tsx`. */
+export const RUDDER_MAX = 90;
 const ROUND_TO = 5;
 
 function roundTo5(value: number): number {
@@ -70,8 +71,11 @@ export interface ApplyCommandResult {
  * - turning the motor off does NOT power the boat off.
  *
  * Speed and direction commands work two ways: bare ("aumentar velocidade",
- * "virar à esquerda") nudges by a default step (10), while a spoken number
- * — digits or spelled out — overrides that step, rounded to the nearest 5.
+ * "virar à esquerda") nudges by a default step (10), while a distinct intent
+ * — speed.increase/decrease still take an optional number, but direction
+ * splits into direction.leftBy/rightBy (see matchIntent's redirect in
+ * commands.ts) — takes a spoken number, digits or spelled out, overriding
+ * that step, rounded to the nearest 5.
  */
 export function applyCommand(state: BoatState, intentName: string, transcript: string, language: Language): ApplyCommandResult {
   switch (intentName) {
@@ -120,6 +124,12 @@ export function applyCommand(state: BoatState, intentName: string, transcript: s
 
     case "direction.left": {
       if (!state.powered) return { state, feedback: { kind: "directionRejected" } };
+      const rudder = clamp(state.rudder - RUDDER_DEFAULT_STEP, -RUDDER_MAX, RUDDER_MAX);
+      return { state: { ...state, rudder }, feedback: { kind: "directionChanged", rudder } };
+    }
+
+    case "direction.leftBy": {
+      if (!state.powered) return { state, feedback: { kind: "directionRejected" } };
       const parsed = parseNumber(transcript, language);
       const delta = parsed !== null ? roundTo5(parsed) : RUDDER_DEFAULT_STEP;
       const rudder = clamp(state.rudder - delta, -RUDDER_MAX, RUDDER_MAX);
@@ -127,6 +137,12 @@ export function applyCommand(state: BoatState, intentName: string, transcript: s
     }
 
     case "direction.right": {
+      if (!state.powered) return { state, feedback: { kind: "directionRejected" } };
+      const rudder = clamp(state.rudder + RUDDER_DEFAULT_STEP, -RUDDER_MAX, RUDDER_MAX);
+      return { state: { ...state, rudder }, feedback: { kind: "directionChanged", rudder } };
+    }
+
+    case "direction.rightBy": {
       if (!state.powered) return { state, feedback: { kind: "directionRejected" } };
       const parsed = parseNumber(transcript, language);
       const delta = parsed !== null ? roundTo5(parsed) : RUDDER_DEFAULT_STEP;

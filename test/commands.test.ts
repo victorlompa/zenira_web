@@ -67,6 +67,26 @@ describe("matchIntent", () => {
     expect(matchIntent("velocidade trinta e cinco", "pt").name).toBe("speed.set");
     expect(matchIntent("speed thirty five", "en").name).toBe("speed.set");
   });
+
+  it("redirects direction.left/right to direction.leftBy/rightBy when a number is spoken", () => {
+    expect(matchIntent("virar à esquerda 20", "pt").name).toBe("direction.leftBy");
+    expect(matchIntent("virar à direita 20", "pt").name).toBe("direction.rightBy");
+    expect(matchIntent("turn left 20 degrees", "en").name).toBe("direction.leftBy");
+    expect(matchIntent("virar à esquerda trinta e cinco", "pt").name).toBe("direction.leftBy");
+    // No number spoken — stays the fixed 10° nudge.
+    expect(matchIntent("virar à esquerda", "pt").name).toBe("direction.left");
+    expect(matchIntent("virar à direita", "pt").name).toBe("direction.right");
+  });
+
+  it("regression: 'graus' appearing before the direction word must still pick the right side", () => {
+    // Previously the bare marker word "graus" in direction.leftBy's own
+    // phrases matched on its own — since direction.leftBy sits earlier in
+    // the `commands` array than direction.right/rightBy, any transcript
+    // containing "graus" (regardless of side) wrongly resolved to the left
+    // intent. displayOnly now keeps that entry out of the matching loop.
+    expect(matchIntent("virar quinze graus direita", "pt").name).toBe("direction.rightBy");
+    expect(matchIntent("virar quinze graus esquerda", "pt").name).toBe("direction.leftBy");
+  });
 });
 
 describe("buildVoskVocabulary", () => {

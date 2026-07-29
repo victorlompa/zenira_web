@@ -120,12 +120,23 @@ describe("applyCommand", () => {
     expect(state.rudder).toBe(10);
   });
 
-  it("steers by a specific spoken amount, rounded to the nearest 5", () => {
+  it("steers by a specific spoken amount, rounded to the nearest 5, via direction.rightBy/leftBy", () => {
+    let state = INITIAL_BOAT_STATE;
+    ({ state } = apply(state, "system.powerOn", "ligar barco"));
+
+    const result = apply(state, "direction.rightBy", "virar à direita 43");
+    expect(result.state.rudder).toBe(45);
+
+    const left = apply(state, "direction.leftBy", "virar à esquerda 22");
+    expect(left.state.rudder).toBe(-20);
+  });
+
+  it("direction.left/right ignore any spoken number and always nudge by the fixed 10° step", () => {
     let state = INITIAL_BOAT_STATE;
     ({ state } = apply(state, "system.powerOn", "ligar barco"));
 
     const result = apply(state, "direction.right", "virar à direita 43");
-    expect(result.state.rudder).toBe(45);
+    expect(result.state.rudder).toBe(10);
   });
 
   it("reports query feedback for telemetry commands without changing state", () => {

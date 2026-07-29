@@ -172,9 +172,12 @@ export class ZeniraPipeline {
     // nothing crossed Vosk's endpointing threshold at all. Surface that as
     // an explicit new "not recognized" result every time it happens, not
     // just the first — see `gotResultThisSession` above for why this can't
-    // just check `!this.lastResult`.
+    // just check `!this.lastResult`. Falls back to the last partial Vosk
+    // reported (rather than an empty string) so the history/Output card
+    // shows what Vosk actually heard instead of a blank "".
     if (!this.gotResultThisSession) {
-      this.lastResult = { transcript: "", intent: { name: "unknown", confidence: 0 } };
+      const transcript = this.lastPartialText;
+      this.lastResult = { transcript, intent: matchIntent(transcript, this.language) };
     }
 
     // A single setState call, carrying lastResult straight into the "armed"

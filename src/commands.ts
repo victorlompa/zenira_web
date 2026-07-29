@@ -16,6 +16,24 @@ export interface CommandDefinition {
   category: CommandCategory;
   /** Several ways of saying the same command, per language — used for both matching and display. */
   phrases: Record<Language, string[]>;
+  /**
+   * Display-only override for the command library UI (`web/src/CommandLibrary.tsx`).
+   * Only set for commands that accept a spoken number (see `numberNote`) — lets the
+   * library show a single "...para X" placeholder instead of every literal number
+   * word, without touching `phrases`, which still needs the real words for matching.
+   */
+  displayPhrases?: Record<Language, string[]>;
+  /** Shown under the phrase list when a command accepts a number — see `NUMBER_WORDS` for the actual accepted values/step. */
+  numberNote?: Record<Language, string>;
+  /**
+   * True for a command that's only ever reached via another command's
+   * redirect in `matchIntent` (e.g. direction.leftBy/rightBy) — its own
+   * `phrases` exist solely to feed `buildVoskVocabulary` and give the
+   * command library a row to render, and must be skipped by `matchIntent`'s
+   * matching loop. Without this, a marker word like "graus" would match on
+   * its own regardless of which direction was actually said.
+   */
+  displayOnly?: boolean;
 }
 
 export const commands: CommandDefinition[] = [
@@ -41,18 +59,37 @@ export const commands: CommandDefinition[] = [
     category: "speed",
     phrases: {
       pt: [
-        "mudar velocidade para",
-        "mudar a velocidade para",
-        "definir velocidade em",
-        "definir a velocidade em",
-        "ajustar velocidade para",
-        "ajustar a velocidade para",
-        "coloca a velocidade em",
-        "coloca a velocidade para",
-        "velocidade para",
-        "velocidade 30",
+        "mudar velocidade para dez",
+        "mudar a velocidade para dez",
+        "definir velocidade em dez",
+        "definir a velocidade em dez",
+        "ajustar velocidade para dez",
+        "ajustar a velocidade para dez",
+        "coloca a velocidade em dez",
+        "coloca a velocidade para dez",
+        "velocidade para dez",
+        "velocidade dez",
       ],
-      en: ["change speed to", "set speed to", "adjust speed to", "speed to", "speed 30"],
+      en: ["change speed to ten", "set speed to", "adjust speed to", "speed to", "speed 30"],
+    },
+    displayPhrases: {
+      pt: [
+        "mudar velocidade para X",
+        "mudar a velocidade para X",
+        "definir velocidade em X",
+        "definir a velocidade em X",
+        "ajustar velocidade para X",
+        "ajustar a velocidade para X",
+        "coloca a velocidade em X",
+        "coloca a velocidade para X",
+        "velocidade para X",
+        "velocidade X",
+      ],
+      en: ["change speed to X", "set speed to X", "adjust speed to X", "speed to X", "speed X"],
+    },
+    numberNote: {
+      pt: "Aceita qualquer valor de 0 a 100, em variações de 5 em 5.",
+      en: "Accepts any value from 0 to 100, in steps of 5.",
     },
   },
   {
@@ -74,6 +111,30 @@ export const commands: CommandDefinition[] = [
       en: ["turn left", "steer left", "left", "go left", "port side"],
     },
   },
+  // Same phrases as direction.left, plus "graus"/"degrees" so Vosk's vocabulary
+  // includes them. displayOnly: true keeps matchIntent from ever matching
+  // this entry directly — otherwise the bare "graus" phrase would match on
+  // its own (e.g. "virar quinze graus direita" would wrongly hit this one
+  // before direction.right ever got a chance). This entry only exists so
+  // matchIntent's redirect below has a distinct intent name to return, and
+  // so the command library can list it as its own row with its own numberNote.
+  {
+    name: "direction.leftBy",
+    category: "direction",
+    displayOnly: true,
+    phrases: {
+      pt: ["virar à esquerda", "virar para esquerda", "vira para a esquerda", "esquerda", "dobrar à esquerda", "bombordo", "graus"],
+      en: ["turn left", "steer left", "left", "go left", "port side", "degrees"],
+    },
+    displayPhrases: {
+      pt: ["virar à esquerda X graus", "vira X graus à esquerda", "esquerda X graus"],
+      en: ["turn left X degrees", "left X degrees"],
+    },
+    numberNote: {
+      pt: "Aceita um valor de graus dito pelo usuário, de 5 em 5 (substitui o padrão de 10°).",
+      en: "Accepts a spoken degree value, in steps of 5 (overrides the default 10°).",
+    },
+  },
   {
     name: "direction.right",
     category: "direction",
@@ -88,6 +149,24 @@ export const commands: CommandDefinition[] = [
         "boreste",
       ],
       en: ["turn right", "steer right", "right", "go right", "starboard"],
+    },
+  },
+  // See the comment on direction.leftBy above — same reasoning, mirrored for the right side.
+  {
+    name: "direction.rightBy",
+    category: "direction",
+    displayOnly: true,
+    phrases: {
+      pt: ["virar à direita", "virar para direita", "vira para a direita", "direita", "dobrar à direita", "estibordo", "boreste", "graus"],
+      en: ["turn right", "steer right", "right", "go right", "starboard", "degrees"],
+    },
+    displayPhrases: {
+      pt: ["virar à direita X graus", "vira X graus à direita", "direita X graus"],
+      en: ["turn right X degrees", "right X degrees"],
+    },
+    numberNote: {
+      pt: "Aceita um valor de graus dito pelo usuário, de 5 em 5 (substitui o padrão de 10°).",
+      en: "Accepts a spoken degree value, in steps of 5 (overrides the default 10°).",
     },
   },
   {
@@ -201,6 +280,7 @@ export function matchIntent(transcript: string, language: Language): Intent {
   const normalized = normalizeText(transcript);
 
   for (const command of commands) {
+    if (command.displayOnly) continue; // only reachable via another command's redirect below
     const hit = command.phrases[language].some((phrase) => normalized.includes(normalizeText(phrase)));
     if (hit) {
       // Bare "velocidade 30" / "speed 30" (no verb) lands here via
@@ -211,6 +291,18 @@ export function matchIntent(transcript: string, language: Language): Intent {
       // since the speed category is checked before telemetry.
       if (command.name === "status.speed" && parseNumber(transcript, language) !== null) {
         return { name: "speed.set", confidence: 1 };
+      }
+      // Same idea for direction: "virar à esquerda" alone is the fixed 10°
+      // nudge, but a spoken number anywhere in the phrase ("virar à esquerda
+      // 20", "20 graus à esquerda") means the user gave their own amount —
+      // reaching direction.leftBy/rightBy never happens via their own
+      // phrases (direction.left/right already matched first), only via this
+      // redirect.
+      if (command.name === "direction.left" && parseNumber(transcript, language) !== null) {
+        return { name: "direction.leftBy", confidence: 1 };
+      }
+      if (command.name === "direction.right" && parseNumber(transcript, language) !== null) {
+        return { name: "direction.rightBy", confidence: 1 };
       }
       return { name: command.name, confidence: 1 };
     }

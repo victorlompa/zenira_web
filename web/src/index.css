@@ -288,6 +288,15 @@ body {
   gap: 0.3rem;
 }
 
+.command-item__number-note {
+  margin: 0;
+  padding: 0.6rem 0.9rem 0.75rem;
+  border-top: 1px solid var(--shadow-dark);
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 .history-list {
   margin: 0;
   padding: 0;

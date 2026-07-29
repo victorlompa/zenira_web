@@ -1,4 +1,4 @@
-import type { BoatState } from "../../src/boatState.ts";
+import { RUDDER_MAX, type BoatState } from "../../src/boatState.ts";
 import { InfoPopover } from "./InfoPopover.tsx";
 import type { Telemetry } from "./useTelemetry.ts";
 
@@ -60,7 +60,7 @@ export function BoatPanel({
   const { voltage, current } = telemetry;
 
   const needleRotation = (state.speed - 50) * 1.8; // -90deg (left) .. +90deg (right), 0 at speed 50
-  const rudderPercent = 50 + (state.rudder / 45) * 50;
+  const rudderPercent = 50 + (state.rudder / RUDDER_MAX) * 50;
   const rudderLabel = state.rudder < -5 ? boatLeft : state.rudder > 5 ? boatRight : boatCenter;
 
   return (

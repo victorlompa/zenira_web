@@ -94,7 +94,8 @@ export function CommandLibrary({ className, title, hint, infoLabel, categoryLabe
             .filter((command) => command.category === activeCategory)
             .map((command) => {
               const isOpen = expandedCommand === command.name;
-              const phrases = command.phrases[language];
+              const phrases = command.displayPhrases?.[language] ?? command.phrases[language];
+              const numberNote = command.numberNote?.[language];
               return (
                 <div className="command-item" key={command.name}>
                   <button
@@ -117,11 +118,14 @@ export function CommandLibrary({ className, title, hint, infoLabel, categoryLabe
                     </span>
                   </button>
                   {isOpen && (
-                    <ul className="command-item__phrases">
-                      {phrases.map((phrase) => (
-                        <li key={phrase}>{phrase}</li>
-                      ))}
-                    </ul>
+                    <>
+                      <ul className="command-item__phrases">
+                        {phrases.map((phrase) => (
+                          <li key={phrase}>{phrase}</li>
+                        ))}
+                      </ul>
+                      {numberNote && <p className="command-item__number-note">{numberNote}</p>}
+                    </>
                   )}
                 </div>
               );
