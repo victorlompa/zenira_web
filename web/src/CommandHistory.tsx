@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { InfoPopover } from "./InfoPopover.tsx";
 
 export interface HistoryEntry {
   id: string;
@@ -12,12 +13,14 @@ const PAGE_SIZE = 5;
 interface CommandHistoryProps {
   className?: string;
   title: string;
+  info: string;
+  infoLabel: string;
   emptyLabel: string;
   unknownLabel: string;
   entries: HistoryEntry[];
 }
 
-export function CommandHistory({ className, title, emptyLabel, unknownLabel, entries }: CommandHistoryProps) {
+export function CommandHistory({ className, title, info, infoLabel, emptyLabel, unknownLabel, entries }: CommandHistoryProps) {
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
   const newestId = entries[0]?.id;
@@ -30,7 +33,10 @@ export function CommandHistory({ className, title, emptyLabel, unknownLabel, ent
 
   return (
     <aside className={`panel ${className ?? ""}`}>
-      <h2 className="panel__title">{title}</h2>
+      <div className="card__header">
+        <h2 className="panel__title">{title}</h2>
+        <InfoPopover text={info} label={infoLabel} />
+      </div>
       {entries.length === 0 ? (
         <p className="card__placeholder">{emptyLabel}</p>
       ) : (

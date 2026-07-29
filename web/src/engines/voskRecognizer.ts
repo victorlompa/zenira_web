@@ -2,19 +2,21 @@ import { createModel, type KaldiRecognizer, type Model } from "vosk-browser";
 import { buildVoskVocabulary } from "../../../src/commands.ts";
 import type { Language, SpeechRecognizer } from "../../../src/types.ts";
 import { getSharedAudioSource } from "../audioGraph.ts";
+import { MODELS_BASE_URL } from "../modelsBaseUrl.ts";
 
 /**
  * Real speech-to-text engine, backed by Vosk running in the browser via
  * vosk-browser (Apache-2.0, WASM build of Vosk). Models are loaded from
- * `web/public/models/<name>.tar.gz` — see README.md for how to build those
- * from the small Vosk models published at https://alphacephei.com/vosk/models.
+ * `MODELS_BASE_URL` (see `../modelsBaseUrl.ts`) — see README.md for how to
+ * build these from the small Vosk models published at
+ * https://alphacephei.com/vosk/models.
  *
  * Only the "small" models are practical to ship to a browser (tens of MB);
  * the large/full models (~1.8GB) would have to run server-side instead.
  */
 const MODEL_URLS: Record<Language, string> = {
-  pt: "/models/vosk-model-small-pt-0.3.tar.gz",
-  en: "/models/vosk-model-small-en-us-0.15.tar.gz",
+  pt: `${MODELS_BASE_URL}/vosk-model-small-pt-0.3.tar.gz`,
+  en: `${MODELS_BASE_URL}/vosk-model-small-en-us-0.15.tar.gz`,
 };
 
 // Loading a model spins up a Web Worker and can take a few seconds; cache by

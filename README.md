@@ -52,10 +52,11 @@ to get right when re-exporting or swapping models:
   use as-is. The **C++ library** export (`edge-impulse-sdk/`,
   `tflite-model/`, `trained.tflite`) is a different target entirely and
   won't run in a browser without compiling it yourself.
-- Copy those three files into `web/public/models/edge-impulse/` (gitignored,
-  same as the Vosk models). `web/src/engines/edgeImpulseClassifier.ts`
-  loads them as classic `<script>` tags (the Emscripten output isn't an ES
-  module, so it can't be `import`ed through Vite).
+- Copy those three files straight into `web/public/models/` (flat, no
+  subfolder — same place the Vosk models live, gitignored).
+  `web/src/engines/edgeImpulseClassifier.ts` loads them as classic
+  `<script>` tags (the Emscripten output isn't an ES module, so it can't be
+  `import`ed through Vite).
 - `HOP_SAMPLES`, `WAKE_LABEL`, and `CONFIDENCE_THRESHOLD` in
   `edgeImpulseWakeWord.ts` are read off the impulse's own
   `deployment-metadata.json` (window/hop size in ms × 16kHz, the wake
@@ -96,6 +97,22 @@ them with the steps above, or fetch pre-packaged copies, before running
 `npm run dev` / `npm run build` in `web/`. Only the small models are
 shipped; the 1.8GB full models aren't practical for the browser.
 
+### Where the model files live
+
+Both engines' model files (`vosk-model-small-pt-0.3.tar.gz`,
+`vosk-model-small-en-us-0.15.tar.gz`, `edge-impulse-standalone.js`,
+`edge-impulse-standalone.wasm`, `run-impulse.js`) are gitignored — ~79MB
+combined, too large to commit. `web/src/modelsBaseUrl.ts` resolves where to
+fetch them from at runtime:
+
+- **Local dev**: defaults to `/models`, i.e. `web/public/models/` — drop
+  the five files there yourself (steps above).
+- **Deployed build**: set the `VITE_MODELS_BASE_URL` env var (see
+  `web/.env.example`) to wherever they were uploaded instead — a GitHub
+  Release's asset base URL, e.g.
+  `https://github.com/<user>/<repo>/releases/download/<tag>`. See the
+  Deploy section below for the exact steps.
+
 ### End state
 
 Once both engines are wired in, the whole pipeline — wake word detection
@@ -115,10 +132,45 @@ already does, in the status note under the transcript).
 
 ## Deploy
 
-Static build (`web/dist` after `npm run build` inside `web/`), deployed
-standalone on its own subdomain (e.g. `zenira.victorlompa.com`) via
-Cloudflare, and linked from the portfolio's Work section rather than
-bundled into it.
+Deployed on Vercel, linked from the portfolio's Work section rather than
+bundled into it. `vercel.json` at the repo root builds from `web/`
+(`cd web && npm install && npm run build`, output `web/dist`) and sets the
+`Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` headers Vosk's
+WASM build needs — matching the headers `web/vite.config.ts` already sets
+for local dev.
+
+Since the model files aren't in git (see above), a Vercel build needs
+`VITE_MODELS_BASE_URL` pointed at wherever they were uploaded. Using a
+GitHub Release on this repo:
+
+1. Locally, make sure `web/public/models/` has all five files (see
+   "Where the model files live" above).
+2. Create a release and upload them as assets:
+   ```bash
+   gh release create models-v1 \
+     web/public/models/vosk-model-small-pt-0.3.tar.gz \
+     web/public/models/vosk-model-small-en-us-0.15.tar.gz \
+     web/public/models/edge-impulse-standalone.js \
+     web/public/models/edge-impulse-standalone.wasm \
+     web/public/models/run-impulse.js \
+     --title "Model files v1" \
+     --notes "Vosk PT/EN + Edge Impulse WASM build, not checked into git (see README)."
+   ```
+   No `gh` CLI? Same result via the web UI: repo → **Releases** → **Draft a
+   new release** → tag `models-v1` → drag all five files into the assets
+   box → **Publish release**.
+3. The asset base URL is
+   `https://github.com/<user>/<repo>/releases/download/models-v1`. In the
+   Vercel project's **Settings → Environment Variables**, add
+   `VITE_MODELS_BASE_URL` with that value (Production — and Preview too, if
+   you want preview deploys to work).
+4. Redeploy. Bumping a model later means uploading a new release (a new
+   tag, e.g. `models-v2`) and updating the env var — GitHub releases are
+   immutable once published, so re-uploading under the same tag isn't an
+   option.
+
+Re-exporting or retraining a model doesn't require a new Vercel deploy by
+itself, only a new release + env var update; the app code doesn't change.
 
 ## Commands
 

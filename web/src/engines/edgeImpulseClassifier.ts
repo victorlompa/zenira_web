@@ -1,3 +1,5 @@
+import { MODELS_BASE_URL } from "../modelsBaseUrl.ts";
+
 /**
  * The Edge Impulse WebAssembly export is classic Emscripten glue — it
  * defines a global `Module` and `EdgeImpulseClassifier`, not an ES module —
@@ -24,8 +26,6 @@ export interface EdgeImpulseClassifierInstance {
 // direct ambient declaration, not `Window.EdgeImpulseClassifier`.
 declare const EdgeImpulseClassifier: new () => EdgeImpulseClassifierInstance;
 
-const BASE_URL = "/models/edge-impulse/";
-
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const script = document.createElement("script");
@@ -41,8 +41,8 @@ let scriptsLoaded: Promise<void> | null = null;
 function loadClassifierScripts(): Promise<void> {
   if (!scriptsLoaded) {
     scriptsLoaded = (async () => {
-      await loadScript(`${BASE_URL}edge-impulse-standalone.js`);
-      await loadScript(`${BASE_URL}run-impulse.js`);
+      await loadScript(`${MODELS_BASE_URL}/edge-impulse-standalone.js`);
+      await loadScript(`${MODELS_BASE_URL}/run-impulse.js`);
     })();
   }
   return scriptsLoaded;

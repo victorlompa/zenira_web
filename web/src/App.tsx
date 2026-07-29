@@ -106,7 +106,11 @@ export default function App() {
 
   useEffect(() => pipeline.onStateChange(setState), [pipeline]);
   useEffect(() => {
-    if (state.status !== "listening" || !state.lastResult) return;
+    // lastResult now rides on both "listening" and "armed" (see
+    // pipeline.ts) so it survives the end-of-session status flip — no
+    // longer gated to "listening" only, or the armed-with-result state
+    // that follows an unrecognized/silent attempt would never get logged.
+    if (state.status === "idle" || !state.lastResult) return;
     if (state.lastResult === lastLoggedResult.current) return;
     lastLoggedResult.current = state.lastResult;
     const { transcript, intent } = state.lastResult;
@@ -332,6 +336,8 @@ export default function App() {
         <BoatPanel
           className="panel--boat"
           title={t.boatTitle}
+          info={t.infoBoat}
+          infoLabel={t.infoLabel}
           state={boat}
           telemetry={telemetry}
           boatSpeedLabel={t.boatSpeedLabel}
@@ -350,6 +356,8 @@ export default function App() {
         <CommandHistory
           className="panel--history"
           title={t.historyTitle}
+          info={t.infoHistory}
+          infoLabel={t.infoLabel}
           emptyLabel={t.historyEmpty}
           unknownLabel={t.historyUnknown}
           entries={history}

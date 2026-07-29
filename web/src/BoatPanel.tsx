@@ -41,6 +41,8 @@ const TRACK_PATH = `M ${TRACK_START.x} ${TRACK_START.y} A ${GAUGE_RADIUS} ${GAUG
 export function BoatPanel({
   className,
   title,
+  info,
+  infoLabel,
   state,
   telemetry,
   boatSpeedLabel,
@@ -63,7 +65,10 @@ export function BoatPanel({
 
   return (
     <div className={`panel ${className ?? ""}`}>
-      <h2 className="panel__title">{title}</h2>
+      <div className="card__header">
+        <h2 className="panel__title">{title}</h2>
+        <InfoPopover text={info} label={infoLabel} />
+      </div>
 
       <div className="boat-status-row">
         <span className={`status-pill ${state.powered ? "status-pill--on" : ""}`}>

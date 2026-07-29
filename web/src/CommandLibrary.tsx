@@ -68,7 +68,7 @@ export function CommandLibrary({ className, title, hint, infoLabel, categoryLabe
 
   return (
     <aside className={`panel ${className ?? ""}`}>
-      <div className="panel__header">
+      <div className="card__header">
         <h2 className="panel__title">{title}</h2>
         <InfoPopover text={hint} label={infoLabel} />
       </div>

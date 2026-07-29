@@ -183,6 +183,52 @@ describe("ZeniraPipeline", () => {
       expect(wakeWord.startCount).toBe(2); // once on arm(), once again once the window closed
     });
 
+    it("surfaces an explicit unknown result if the window closes with no final ever received", () => {
+      const wakeWord = new FakeWakeWord();
+      const recognizer = new FakeRecognizer();
+      const pipeline = new ZeniraPipeline(wakeWord, recognizer, "pt");
+
+      pipeline.arm(fakeStream());
+      pipeline.triggerWakeWord();
+      vi.advanceTimersByTime(3100); // no recognizer.finish(...) call at all — pure silence
+
+      // Carried on the very same state update that flips status to "armed"
+      // — not a separate, earlier "listening" broadcast — since React
+      // batches same-tick setState calls and would otherwise drop it before
+      // any consumer (the Output card / history effect) ever saw it.
+      const state = pipeline.getState();
+      expect(state.status).toBe("armed");
+      if (state.status === "armed") {
+        expect(state.lastResult).toEqual({ transcript: "", intent: { name: "unknown", confidence: 0 } });
+      }
+    });
+
+    it("surfaces a fresh unknown result every time a session goes unrecognized, not just the first", () => {
+      const wakeWord = new FakeWakeWord();
+      const recognizer = new FakeRecognizer();
+      const pipeline = new ZeniraPipeline(wakeWord, recognizer, "pt");
+      const states = vi.fn();
+      pipeline.onStateChange(states);
+
+      pipeline.arm(fakeStream());
+
+      pipeline.triggerWakeWord();
+      vi.advanceTimersByTime(3100); // session 1: silence
+      const firstUnknown = states.mock.calls.at(-1)?.[0];
+
+      pipeline.triggerWakeWord();
+      vi.advanceTimersByTime(3100); // session 2: silence again
+      const secondUnknown = states.mock.calls.at(-1)?.[0];
+
+      // Constrained-grammar Vosk means this is the common case in practice
+      // (speech that doesn't match any command word never finalizes) — a
+      // dedup-by-reference check downstream (App.tsx) must see these as two
+      // distinct results, or the second (and every one after) silently
+      // never reaches history/Output.
+      expect(firstUnknown).not.toBe(secondUnknown);
+      expect(firstUnknown.lastResult).toEqual(secondUnknown.lastResult);
+    });
+
     it("extends the window while the transcript is still actively changing", () => {
       const wakeWord = new FakeWakeWord();
       const recognizer = new FakeRecognizer();

@@ -12,7 +12,8 @@ const CONFIDENCE_THRESHOLD = 0.5;
 
 /**
  * Real wake-word engine, backed by the Edge Impulse model trained for
- * MCV25/Zenira (WASM export in `web/public/models/edge-impulse/`).
+ * MCV25/Zenira (WASM export served from `MODELS_BASE_URL`, see
+ * `edgeImpulseClassifier.ts` and `../modelsBaseUrl.ts`).
  */
 export class EdgeImpulseWakeWordDetector implements WakeWordDetector {
   private processor: ScriptProcessorNode | null = null;

@@ -627,6 +627,76 @@ body {
   color: var(--text-muted);
 }
 
+.card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.card__header .card__label,
+.card__header .panel__title {
+  margin-bottom: 0;
+}
+
+.info-popover {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+.info-popover__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.info-popover__button:hover,
+.info-popover__button[aria-expanded="true"] {
+  color: var(--accent-start);
+  background: var(--card-bg);
+  box-shadow:
+    inset 2px 2px 4px var(--shadow-dark),
+    inset -2px -2px 4px var(--shadow-light);
+}
+
+.info-popover__button svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.info-popover__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 240px;
+  padding: 0.65rem 0.8rem;
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow:
+    6px 6px 14px var(--shadow-dark),
+    -6px -6px 14px var(--shadow-light);
+}
+
 .card__body {
   margin: 0;
   min-height: 1.6em;

@@ -32,9 +32,19 @@ export interface SpeechRecognizer {
 /** Languages the demo can transcribe speech in. */
 export type Language = "pt" | "en";
 
+/**
+ * `lastResult` is carried on both "armed" and "listening" (not just
+ * "listening") and never cleared until a new one replaces it — so the last
+ * command's outcome (recognized or not) stays visible across the
+ * listening -> armed transition instead of disappearing the instant a
+ * session ends. Also avoids a React batching trap: setting it and then
+ * immediately changing `status` in the same synchronous call would
+ * otherwise coalesce into one render that only reflects the final status,
+ * silently dropping the intermediate value from the state consumers see.
+ */
 export type PipelineState =
   | { status: "idle" }
-  | { status: "armed"; wakeWordScores?: ClassScore[] }
+  | { status: "armed"; wakeWordScores?: ClassScore[]; lastResult?: { transcript: string; intent: Intent } }
   | { status: "listening"; partialTranscript: string; lastResult?: { transcript: string; intent: Intent } };
 
 export interface Intent {
