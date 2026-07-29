@@ -108,11 +108,12 @@ fetch them from at runtime:
 - **Local dev**: defaults to `/models`, i.e. `web/public/models/` — drop
   the five files there yourself (steps above).
 - **Deployed build**: also defaults to `/models`, same as local — but on
-  Vercel that path is proxied to a GitHub Release via a rewrite in
-  `vercel.json`, not served from `web/public/models/` (which isn't in the
+  Vercel that path is rewritten to `api/models/[...path].js`, an Edge
+  Function that fetches the file from a GitHub Release and streams it back,
+  rather than served from `web/public/models/` (which isn't in the
   deployed build at all, being gitignored). See the Deploy section below
-  for why this goes through a same-origin proxy instead of just pointing
-  `VITE_MODELS_BASE_URL` at `github.com`.
+  for why it's a proxying function and not just a redirect to
+  `github.com`.
 
 ### End state
 
@@ -161,26 +162,35 @@ served from somewhere. Using a GitHub Release on this repo:
    box → **Publish release**. The repo hosting the release must be
    **public** — private-repo release assets 404 for an unauthenticated
    request, which is exactly what a visitor's browser makes.
-3. `vercel.json` rewrites `/models/:path*` to that release's asset base URL
-   (`https://github.com/<user>/<repo>/releases/download/<tag>/:path*`) —
-   update the tag there when you bump the release. This isn't just
-   convenience: the site sets `Cross-Origin-Embedder-Policy: require-corp`
-   (Vosk's WASM build needs cross-origin isolation), which makes the
-   browser silently block any cross-origin subresource that doesn't send a
-   `Cross-Origin-Resource-Policy`/CORS header — and GitHub's release-asset
-   CDN sends neither. Routing the request through `/models/...` on the
-   site's own origin (rather than pointing `VITE_MODELS_BASE_URL` straight
-   at `github.com`) makes it same-origin from the browser's point of view,
-   which sidesteps COEP entirely. Leave `VITE_MODELS_BASE_URL` unset in
-   Vercel — its default (`/models`) is what the rewrite matches; setting it
-   to the GitHub URL directly brings the COEP block back.
-4. Redeploy. Bumping a model later means uploading a new release (a new
-   tag, e.g. `models-v2`) and updating the rewrite's destination in
-   `vercel.json` — GitHub releases are immutable once published, so
-   re-uploading under the same tag isn't an option.
+3. `vercel.json` rewrites `/models/:path*` to `/api/models/:path*`, an Edge
+   Function (`api/models/[...path].js`) whose `RELEASE_BASE` constant
+   points at that release's asset base URL — update it there when you bump
+   the release. It has to be a proxying function, not a plain rewrite
+   straight to `github.com`, for two stacked reasons:
+   - The site sets `Cross-Origin-Embedder-Policy: require-corp` (Vosk's
+     WASM build needs cross-origin isolation), which makes the browser
+     silently block any cross-origin subresource that doesn't send a
+     `Cross-Origin-Resource-Policy`/CORS header — and GitHub's
+     release-asset CDN sends neither.
+   - A `vercel.json` rewrite straight to the GitHub URL doesn't dodge that
+     either: GitHub's download URL itself 302s to Azure Blob Storage, and
+     Vercel forwards that redirect to the browser rather than resolving it
+     — so the browser ends up following the redirect itself, landing back
+     on a cross-origin, COEP-blocked URL.
 
-Re-exporting or retraining a model doesn't require touching the app code,
-only a new release + the `vercel.json` rewrite update.
+   The Edge Function sidesteps both: it fetches the release asset
+   server-side (resolving the redirect there, invisible to the browser)
+   and streams the response back from the site's own origin. Leave
+   `VITE_MODELS_BASE_URL` unset in Vercel — its default (`/models`) is what
+   the rewrite matches; setting it to the GitHub URL directly brings the
+   COEP block back.
+4. Redeploy. Bumping a model later means uploading a new release (a new
+   tag, e.g. `models-v2`) and updating `RELEASE_BASE` in
+   `api/models/[...path].js` — GitHub releases are immutable once
+   published, so re-uploading under the same tag isn't an option.
+
+Re-exporting or retraining a model doesn't require touching the rest of
+the app code, only a new release + that one constant.
 
 ## Commands
 

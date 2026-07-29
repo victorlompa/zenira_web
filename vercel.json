@@ -14,7 +14,7 @@
   "rewrites": [
     {
       "source": "/models/:path*",
-      "destination": "https://github.com/victorlompa/zenira_web/releases/download/models-v1/:path*"
+      "destination": "/api/models/:path*"
     }
   ]
 }
