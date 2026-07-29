@@ -107,13 +107,14 @@ fetch them from at runtime:
 
 - **Local dev**: defaults to `/models`, i.e. `web/public/models/` — drop
   the five files there yourself (steps above).
-- **Deployed build**: also defaults to `/models`, same as local — but on
-  Vercel that path is rewritten to `api/models/[...path].js`, an Edge
-  Function that fetches the file from a GitHub Release and streams it back,
-  rather than served from `web/public/models/` (which isn't in the
-  deployed build at all, being gitignored). See the Deploy section below
-  for why it's a proxying function and not just a redirect to
-  `github.com`.
+- **Deployed build**: defaults to `/api/models`, an Edge Function
+  (`api/models/[...path].js`) that fetches the file from a GitHub Release
+  and streams it back, rather than served from `web/public/models/` (which
+  isn't in the deployed build at all, being gitignored). `vercel.json` also
+  rewrites `/models/...` to that same function as a convenience alias, but
+  the app doesn't depend on the rewrite working — it points at `/api/models`
+  directly. See the Deploy section below for why it's a proxying function
+  and not just a redirect to `github.com`.
 
 ### End state
 
@@ -162,8 +163,8 @@ served from somewhere. Using a GitHub Release on this repo:
    box → **Publish release**. The repo hosting the release must be
    **public** — private-repo release assets 404 for an unauthenticated
    request, which is exactly what a visitor's browser makes.
-3. `vercel.json` rewrites `/models/:path*` to `/api/models/:path*`, an Edge
-   Function (`api/models/[...path].js`) whose `RELEASE_BASE` constant
+3. `web/src/modelsBaseUrl.ts` points production builds at `/api/models`, an
+   Edge Function (`api/models/[...path].js`) whose `RELEASE_BASE` constant
    points at that release's asset base URL — update it there when you bump
    the release. It has to be a proxying function, not a plain rewrite
    straight to `github.com`, for two stacked reasons:
@@ -181,8 +182,8 @@ served from somewhere. Using a GitHub Release on this repo:
    The Edge Function sidesteps both: it fetches the release asset
    server-side (resolving the redirect there, invisible to the browser)
    and streams the response back from the site's own origin. Leave
-   `VITE_MODELS_BASE_URL` unset in Vercel — its default (`/models`) is what
-   the rewrite matches; setting it to the GitHub URL directly brings the
+   `VITE_MODELS_BASE_URL` unset in Vercel — its default (`/api/models`) is
+   the function itself; setting it to the GitHub URL directly brings the
    COEP block back.
 4. Redeploy. Bumping a model later means uploading a new release (a new
    tag, e.g. `models-v2`) and updating `RELEASE_BASE` in
