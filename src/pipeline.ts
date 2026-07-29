@@ -25,6 +25,7 @@ export class ZeniraPipeline {
   private stream: MediaStream | null = null;
   private lastResult: { transcript: string; intent: Intent } | undefined;
   private readonly listeners = new Set<(state: PipelineState) => void>();
+  private readonly errorListeners = new Set<(error: unknown) => void>();
   private listenTimer: ReturnType<typeof setTimeout> | null = null;
   private listenStartedAt = 0;
   private lastPartialAt = 0;
@@ -53,6 +54,12 @@ export class ZeniraPipeline {
   onStateChange(listener: (state: PipelineState) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** Fires when the wake-word detector or speech recognizer fails to start (e.g. a model failed to load). */
+  onError(listener: (error: unknown) => void): () => void {
+    this.errorListeners.add(listener);
+    return () => this.errorListeners.delete(listener);
   }
 
   getState(): PipelineState {
@@ -86,7 +93,12 @@ export class ZeniraPipeline {
       stream,
       () => this.startListening(),
       (scores) => this.onWakeWordScores(scores),
+      (error) => this.emitError(error),
     );
+  }
+
+  private emitError(error: unknown): void {
+    for (const listener of this.errorListeners) listener(error);
   }
 
   private onWakeWordScores(scores: ClassScore[]): void {
@@ -124,6 +136,7 @@ export class ZeniraPipeline {
         this.lastResult = { transcript: final, intent: matchIntent(final, this.language) };
         this.setState({ status: "listening", partialTranscript: "", lastResult: this.lastResult });
       },
+      (error) => this.emitError(error),
     );
     this.scheduleListenCheck(LISTEN_WINDOW_MS);
   }

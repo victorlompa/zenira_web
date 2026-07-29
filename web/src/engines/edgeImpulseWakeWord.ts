@@ -23,9 +23,17 @@ export class EdgeImpulseWakeWordDetector implements WakeWordDetector {
   private triggered = false;
   private stopped = false;
 
-  start(stream: MediaStream, onDetected: () => void, onScores?: (scores: ClassScore[]) => void): void {
+  start(
+    stream: MediaStream,
+    onDetected: () => void,
+    onScores?: (scores: ClassScore[]) => void,
+    onError?: (error: unknown) => void,
+  ): void {
     this.stopped = false;
-    void this.startAsync(stream, onDetected, onScores);
+    this.startAsync(stream, onDetected, onScores).catch((error: unknown) => {
+      console.error("Zenira: Edge Impulse wake word failed to start", error);
+      onError?.(error);
+    });
   }
 
   private async startAsync(

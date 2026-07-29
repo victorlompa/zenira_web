@@ -391,16 +391,20 @@ body {
     max-height: none;
   }
 
+  /* Boat panel and history each get their own full-screen tab on mobile —
+     no shared/nested container — so only the one matching data-active is
+     pulled out of .side-column (which otherwise stays display:none). */
+  .layout[data-active="boat"] .side-column,
   .layout[data-active="history"] .side-column {
-    display: flex;
-    width: 100%;
-    max-height: none;
-    overflow: visible;
-  }
-
-  .layout[data-active="history"] .side-column .panel {
     display: block;
     width: 100%;
+  }
+
+  .layout[data-active="boat"] .panel--boat,
+  .layout[data-active="history"] .panel--history {
+    display: block;
+    width: 100%;
+    max-height: none;
   }
 
   .layout[data-active="zenira"] .page {
@@ -431,6 +435,15 @@ body {
     10px 10px 24px var(--shadow-dark),
     -10px -10px 24px var(--shadow-light);
   transition: background-color 0.7s ease, box-shadow 0.7s ease;
+}
+
+.shell--wake-detected {
+  box-shadow:
+    0 0 0 3px var(--accent-start),
+    0 0 24px 4px color-mix(in srgb, var(--accent-start) 55%, transparent),
+    10px 10px 24px var(--shadow-dark),
+    -10px -10px 24px var(--shadow-light);
+  transition: box-shadow 0.2s ease;
 }
 
 .shell__header {

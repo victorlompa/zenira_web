@@ -44,6 +44,11 @@ function loadClassifierScripts(): Promise<void> {
       await loadScript(`${MODELS_BASE_URL}/edge-impulse-standalone.js`);
       await loadScript(`${MODELS_BASE_URL}/run-impulse.js`);
     })();
+    // Don't leave a rejected promise cached — see voskRecognizer.ts's
+    // loadModel for why (same failure mode, same fix).
+    scriptsLoaded.catch(() => {
+      scriptsLoaded = null;
+    });
   }
   return scriptsLoaded;
 }

@@ -25,6 +25,7 @@ export interface Strings {
   start: string;
   stop: string;
   micDenied: string;
+  engineError: string;
   idleNote: string;
   note: (realWakeWord: boolean, realStt: boolean, language: Language) => string;
   libraryTitle: string;
@@ -34,6 +35,7 @@ export interface Strings {
   historyUnknown: string;
   tabZenira: string;
   tabLibrary: string;
+  tabBoat: string;
   tabHistory: string;
   boatTitle: string;
   boatSpeedLabel: string;
@@ -87,6 +89,7 @@ export const STRINGS: Record<Language, Strings> = {
     start: "Start listening",
     stop: "Stop",
     micDenied: "Microphone access denied — Zenira needs it to detect the wake word.",
+    engineError: "Speech engine failed to start",
     outputLabel: "Output",
     outputPlaceholder: "Nothing to report yet.",
     infoLabel: "Info",
@@ -117,6 +120,7 @@ export const STRINGS: Record<Language, Strings> = {
     historyUnknown: "not recognized",
     tabZenira: "Zenira",
     tabLibrary: "Commands",
+    tabBoat: "Boat",
     tabHistory: "History",
     boatTitle: "Boat panel",
     boatSpeedLabel: "Speed",
@@ -165,6 +169,7 @@ export const STRINGS: Record<Language, Strings> = {
     start: "Iniciar escuta",
     stop: "Parar",
     micDenied: "Acesso ao microfone negado — a Zenira precisa dele para detectar a palavra de ativação.",
+    engineError: "Falha ao iniciar o motor de reconhecimento de fala",
     outputLabel: "Resposta",
     outputPlaceholder: "Nada a reportar ainda.",
     infoLabel: "Informação",
@@ -195,6 +200,7 @@ export const STRINGS: Record<Language, Strings> = {
     historyUnknown: "não reconhecido",
     tabZenira: "Zenira",
     tabLibrary: "Comandos",
+    tabBoat: "Painel",
     tabHistory: "Histórico",
     boatTitle: "Painel do barco",
     boatSpeedLabel: "Velocidade",

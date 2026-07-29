@@ -19,13 +19,23 @@ export interface WakeWordDetector {
    * UI can show live confidence — implementations without real per-class
    * scores (e.g. mocks) may simply never call it.
    */
-  start(stream: MediaStream, onDetected: () => void, onScores?: (scores: ClassScore[]) => void): void;
+  start(
+    stream: MediaStream,
+    onDetected: () => void,
+    onScores?: (scores: ClassScore[]) => void,
+    onError?: (error: unknown) => void,
+  ): void;
   stop(): void;
 }
 
 export interface SpeechRecognizer {
   /** Starts a single transcription pass on the given audio stream. */
-  start(stream: MediaStream, onPartial: (text: string) => void, onFinal: (text: string) => void): void;
+  start(
+    stream: MediaStream,
+    onPartial: (text: string) => void,
+    onFinal: (text: string) => void,
+    onError?: (error: unknown) => void,
+  ): void;
   stop(): void;
 }
 

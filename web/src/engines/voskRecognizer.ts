@@ -28,6 +28,10 @@ function loadModel(language: Language): Promise<Model> {
   let model = modelCache.get(language);
   if (!model) {
     model = createModel(MODEL_URLS[language]);
+    // Don't leave a rejected promise cached — a transient failure (network
+    // hiccup mid-download, worker error) would otherwise make every future
+    // arm attempt fail instantly with the same stale error forever.
+    model.catch(() => modelCache.delete(language));
     modelCache.set(language, model);
   }
   return model;
@@ -41,8 +45,16 @@ export class VoskSpeechRecognizer implements SpeechRecognizer {
 
   constructor(private readonly language: Language) {}
 
-  start(stream: MediaStream, onPartial: (text: string) => void, onFinal: (text: string) => void): void {
-    void this.startAsync(stream, onPartial, onFinal);
+  start(
+    stream: MediaStream,
+    onPartial: (text: string) => void,
+    onFinal: (text: string) => void,
+    onError?: (error: unknown) => void,
+  ): void {
+    this.startAsync(stream, onPartial, onFinal).catch((error: unknown) => {
+      console.error("Zenira: Vosk failed to start", error);
+      onError?.(error);
+    });
   }
 
   private async startAsync(

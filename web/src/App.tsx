@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { applyCommand, INITIAL_BOAT_STATE, type BoatState } from "../../src/boatState.ts";
 import { ZeniraPipeline } from "../../src/pipeline.ts";
-import type { Intent, Language, PipelineState } from "../../src/types.ts";
+import type { ClassScore, Intent, Language, PipelineState } from "../../src/types.ts";
 import { AudioLevelMeter } from "./AudioLevelMeter.tsx";
 import { releaseSharedAudioSource } from "./audioGraph.ts";
 import { BoatPanel } from "./BoatPanel.tsx";
@@ -13,7 +13,7 @@ import { STRINGS } from "./i18n.ts";
 import { InfoPopover } from "./InfoPopover.tsx";
 import { useTelemetry } from "./useTelemetry.ts";
 
-type Tab = "library" | "zenira" | "history";
+type Tab = "library" | "zenira" | "boat" | "history";
 
 const MAX_HISTORY_ENTRIES = 25;
 
@@ -37,6 +37,34 @@ function micConstraints(deviceId: string): MediaStreamConstraints {
   };
 }
 
+// A short two-tone chime marking the moment the wake word fires — its own
+// throwaway AudioContext, independent of the shared one the mic pipeline
+// taps, so it doesn't interfere with (or get torn down by) that graph.
+function playWakeChime(): void {
+  try {
+    const ctx = new AudioContext();
+    const gain = ctx.createGain();
+    gain.gain.value = 0.0001;
+    gain.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    [880, 1320].forEach((frequency, i) => {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = frequency;
+      osc.connect(gain);
+      const start = now + i * 0.09;
+      osc.start(start);
+      osc.stop(start + 0.12);
+    });
+    gain.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+    setTimeout(() => void ctx.close(), 500);
+  } catch {
+    // Best-effort only — a chime failing to play shouldn't break anything.
+  }
+}
+
 type Theme = "light" | "dark";
 
 function getInitialTheme(): Theme {
@@ -57,6 +85,15 @@ export default function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [boat, setBoat] = useState<BoatState>(INITIAL_BOAT_STATE);
   const [feedback, setFeedback] = useState<string | null>(null);
+  // Kept in the UI layer only (not the pipeline): the "Confiança da palavra
+  // de ativação" card is hidden entirely while "listening" (so the
+  // transcript card gets full attention right after the wake word fires),
+  // then reappears once back to "armed" — using the last known scores
+  // rather than starting blank, since the detector needs a moment after
+  // restarting to produce a fresh one. The pipeline itself stays stateless
+  // about this between sessions, same as before.
+  const [wakeWordScores, setWakeWordScores] = useState<ClassScore[] | undefined>(undefined);
+  const previousStatus = useRef<PipelineState["status"]>("idle");
   const lastLoggedResult = useRef<{ transcript: string; intent: Intent } | undefined>(undefined);
   const t = STRINGS[language];
   const telemetry = useTelemetry(boat.motorOn, boat.speed);
@@ -105,6 +142,22 @@ export default function App() {
   );
 
   useEffect(() => pipeline.onStateChange(setState), [pipeline]);
+  useEffect(() => {
+    if (state.status === "armed" && state.wakeWordScores) setWakeWordScores(state.wakeWordScores);
+    if (state.status === "idle") setWakeWordScores(undefined);
+
+    if (state.status === "listening" && previousStatus.current !== "listening") playWakeChime();
+    previousStatus.current = state.status;
+  }, [state]);
+  useEffect(
+    () =>
+      pipeline.onError((error) => {
+        console.error("Zenira: engine error", error);
+        const message = error instanceof Error ? error.message : String(error);
+        setError(`${t.engineError}: ${message}`);
+      }),
+    [pipeline, t],
+  );
   useEffect(() => {
     // lastResult now rides on both "listening" and "armed" (see
     // pipeline.ts) so it survives the end-of-session status flip — no
@@ -181,7 +234,7 @@ export default function App() {
       />
 
       <main className="page">
-      <div className="shell">
+      <div className={`shell ${state.status === "listening" ? "shell--wake-detected" : ""}`}>
         <header className="shell__header">
           <span className="shell__logo">Zenira</span>
           <button
@@ -224,13 +277,13 @@ export default function App() {
           />
         )}
 
-        {state.status === "armed" && state.wakeWordScores && (
+        {state.status === "armed" && wakeWordScores && (
           <div className="card">
             <div className="card__header">
               <p className="card__label">{t.wakeWordScoresLabel}</p>
               <InfoPopover text={t.infoWakeWordScores} label={t.infoLabel} />
             </div>
-            {state.wakeWordScores.map((score) => (
+            {wakeWordScores.map((score) => (
               <div className="scorebar" key={score.label}>
                 <div className="scorebar__row">
                   <span>{score.label}</span>
@@ -395,6 +448,18 @@ export default function App() {
             />
           </svg>
           {t.tabZenira}
+        </button>
+        <button
+          type="button"
+          className={`tabbar__btn ${tab === "boat" ? "tabbar__btn--active" : ""}`}
+          onClick={() => setTab("boat")}
+        >
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 16a8 8 0 1 1 16 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <path d="M12 16 16 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <circle cx="12" cy="16" r="1.3" fill="currentColor" />
+          </svg>
+          {t.tabBoat}
         </button>
         <button
           type="button"
