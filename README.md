@@ -1,20 +1,40 @@
 # Zenira — voice pipeline demo
 
 Browser demo of the voice-control pipeline from [MCV25](https://github.com/ZeniteSolar/MCV25)
-("Zenira"), the offline wake-word + speech-to-text module built for the
-ZeniteSolar solar car. The production module runs on a Raspberry Pi in
-C/C++ (CMake, Edge Impulse SDK for the wake word, Vosk for transcription).
-This repo re-implements the same pipeline shape to run **entirely
-client-side in the browser**, using the same two ML engines exported to
-WebAssembly.
+("Zenira"), the offline wake-word + speech-to-text module built for
+ZeniteSolar's solar-powered boat. The production module runs on a
+Raspberry Pi in C/C++ (CMake, Edge Impulse SDK for the wake word, Vosk for
+transcription). This repo re-implements the same pipeline shape to run
+**entirely client-side in the browser**, using the same two ML engines
+exported to WebAssembly. No audio ever leaves the visitor's device.
+
+This repository is public: the Vosk and Edge Impulse model files are too
+large to commit (~79MB combined) and are instead distributed as GitHub
+Release assets, which only resolve for unauthenticated requests — the
+browser's, on every page load — when the hosting repo is public. See
+[Deploy](#deploy) for the full reasoning.
+
+## Features
+
+- Bilingual (Portuguese / English) voice command grammar covering speed,
+  direction, power/engine controls, and telemetry queries.
+- Live wake-word confidence meter and raw microphone waveform, so it's
+  obvious whether audio is actually being captured before suspecting the
+  recognition engines.
+- A simulated boat dashboard (speed gauge, rudder indicator, battery/engine
+  telemetry) driven entirely by recognized voice commands.
+- A command history log and a searchable command-library reference, so a
+  visitor can see exactly what phrasing is recognized before trying it.
+- Light/dark theme, and a mobile-first responsive layout distinct from the
+  desktop multi-panel view.
 
 ## Architecture
 
-Same split as [everyday_puzzle](../everyday_puzzle): framework-free core +
-thin web UI.
+Framework-free core + thin web UI, split so the pipeline logic is testable
+without a browser and without either ML engine actually running.
 
 - `src/` — the pipeline itself: a state machine (`idle` → `armed` →
-  `listening` → `command`) plus intent matching, written against
+  `listening`) plus intent matching, written against
   `WakeWordDetector` / `SpeechRecognizer` interfaces (`src/types.ts`) so it
   doesn't care whether those are backed by real WASM models or test
   doubles. Tested with Vitest (`npm test`), no browser required.
@@ -24,22 +44,61 @@ thin web UI.
   (`web/src/engines/edgeImpulseWakeWord.ts`,
   `web/src/engines/voskRecognizer.ts`), switched independently by the
   `usingRealWakeWord` / `usingRealSpeechRecognizer` flags in
-  `web/src/engines/index.ts`. Both are `true` — both real engines are
-  wired in. `web/src/audioGraph.ts` gives them (and the mic level meter)
-  a single shared `AudioContext`/`MediaStreamAudioSourceNode` per stream,
-  since handing each consumer its own was an actual source of "the mic
-  isn't being captured" bugs during development — see that file's
-  comments if you're adding a third audio consumer.
+  `web/src/engines/index.ts`. Both are `true` in this deployment — both
+  real engines are wired in. `web/src/audioGraph.ts` gives them (and the
+  mic level meter) a single shared `AudioContext`/`MediaStreamAudioSourceNode`
+  per stream — handing each consumer its own was an actual source of "the
+  mic isn't being captured" bugs during development.
 
-Wake word detection is manual-only right now (see `src/pipeline.ts`'s
-class comment) — arming doesn't start the detector automatically, a
-button triggers it. The detector itself still runs for real underneath;
-flipping that back to automatic just means calling `wakeWord.start()`
-again from `ZeniraPipeline.arm()`.
+Wake-word detection starts automatically as soon as the pipeline is armed.
+A manual "Trigger wake word" button in the UI stays available alongside it,
+as a fallback for demoing the rest of the pipeline without relying on the
+classifier picking up the room's actual audio.
+
+### Pipeline flow
+
+How audio and data actually move through the system, from the microphone to
+a recognized command reaching the UI. The dotted edges are the two
+"nothing matched" escape hatches: a manual trigger that skips the wake-word
+classifier entirely, and a listening window that times out back to the
+detector instead of hanging forever waiting for speech that isn't coming.
+
+```mermaid
+flowchart TD
+    mic["Microphone\n(getUserMedia)"]
+    wake["Wake word detector\n(Edge Impulse, always listening)"]
+    stt["Speech recognizer\n(Vosk, active only while listening)"]
+    intent["matchIntent()\nsrc/commands.ts"]
+    boat["applyCommand()\nsrc/boatState.ts"]
+    ui["React UI\ndashboard · history · feedback"]
+
+    mic --> wake
+    wake -- "wake word detected" --> stt
+    mic -. "'Trigger wake word' button\n(manual, bypasses the detector)" .-> stt
+    stt -- "final transcript" --> intent
+    intent -- "intent name" --> boat
+    boat -- "new boat state + feedback" --> ui
+    stt -. "listening window times out\n(no match)" .-> wake
+```
+
+The same behavior, seen instead as `ZeniraPipeline`'s own state machine
+(`src/pipeline.ts`) — `idle` only while unarmed, then bouncing between
+`armed` (wake word running) and `listening` (Vosk running) for as long as
+the mic is granted:
+
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+    idle --> armed: arm(stream)
+    armed --> listening: wake word detected or triggerWakeWord()
+    listening --> armed: final transcript matched or window times out
+    armed --> idle: disarm()
+    listening --> idle: disarm()
+```
 
 ## Wiring in the real engines
 
-### Wake word (done — Edge Impulse, MCV25's "Zenira" model)
+### Wake word (Edge Impulse, MCV25's "Zenira" model)
 
 `EdgeImpulseWakeWordDetector` (`web/src/engines/edgeImpulseWakeWord.ts`)
 loads the WASM classifier exported from Edge Impulse Studio. Two things
@@ -63,7 +122,7 @@ to get right when re-exporting or swapping models:
   word's class label, and the learn block's confidence threshold) — update
   them if you retrain with different windowing or class names.
 
-### Speech-to-text (done — Vosk, Portuguese + English)
+### Speech-to-text (Vosk, Portuguese + English)
 
 `vosk-browser` is installed and `VoskSpeechRecognizer`
 (`web/src/engines/voskRecognizer.ts`) is wired in. A language picker in
@@ -113,15 +172,15 @@ fetch them from at runtime:
   isn't in the deployed build at all, being gitignored). `vercel.json` also
   rewrites `/models/...` to that same function as a convenience alias, but
   the app doesn't depend on the rewrite working — it points at `/api/models`
-  directly. See the Deploy section below for why it's a proxying function
-  and not just a redirect to `github.com`.
+  directly. See [Deploy](#deploy) for why it's a proxying function and not
+  just a redirect to `github.com`.
 
 ### End state
 
-Once both engines are wired in, the whole pipeline — wake word detection
-and transcription — runs in the visitor's browser; no audio is sent to
-any server. Worth calling that out on the demo page itself (the app
-already does, in the status note under the transcript).
+With both engines wired in, the whole pipeline — wake word detection and
+transcription — runs in the visitor's browser; no audio is sent to any
+server. That's called out on the demo page itself, in the status note
+under the transcript.
 
 ## Legal note
 
@@ -162,7 +221,8 @@ served from somewhere. Using a GitHub Release on this repo:
    new release** → tag `models-v1` → drag all five files into the assets
    box → **Publish release**. The repo hosting the release must be
    **public** — private-repo release assets 404 for an unauthenticated
-   request, which is exactly what a visitor's browser makes.
+   request, which is exactly what a visitor's browser makes. This is why
+   this repository is public rather than private.
 3. `web/src/modelsBaseUrl.ts` points production builds at `/api/models`, an
    Edge Function (`api/models/[...path].js`) whose `RELEASE_BASE` constant
    points at that release's asset base URL — update it there when you bump
@@ -196,13 +256,15 @@ the app code, only a new release + that one constant.
 ## Commands
 
 ```bash
-npm install       # core deps, at repo root
-npm test          # vitest, core pipeline + intent matching
+npm install         # core deps, at repo root
+npm test            # vitest, core pipeline + intent matching
+npm run test:watch  # vitest, watch mode
 npm run typecheck
 
 cd web
 npm install
-npm run dev        # local dev server
-npm run build       # type-check + production build
-npm run lint         # oxlint
+npm run dev          # local dev server
+npm run build         # type-check + production build
+npm run preview        # preview a production build locally
+npm run lint            # oxlint
 ```
