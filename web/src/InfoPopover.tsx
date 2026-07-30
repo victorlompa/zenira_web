@@ -5,7 +5,6 @@ interface InfoPopoverProps {
   label: string;
 }
 
-/** A small "?" button that reveals an explanatory popover — closes on any click outside it. */
 export function InfoPopover({ text, label }: InfoPopoverProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);

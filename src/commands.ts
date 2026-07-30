@@ -1,43 +1,18 @@
 import { NUMBER_WORDS, normalizeText, parseNumber } from "./numbers.js";
 import type { Intent, Language } from "./types.js";
 
-/**
- * Illustrative command grammar for the demo — NOT the production MCV25
- * command set (that logic lives in the car's control firmware, not here).
- * Each command lists several ways to phrase it, kept separate per language
- * so matching (and the command library UI, `web/src/CommandLibrary.tsx`)
- * never mixes a Portuguese phrase into an English session or vice versa —
- * they stay in sync with whichever language Vosk is currently transcribing.
- */
 export type CommandCategory = "speed" | "direction" | "command" | "telemetry";
 
 export interface CommandDefinition {
   name: string;
   category: CommandCategory;
-  /** Several ways of saying the same command, per language — used for both matching and display. */
   phrases: Record<Language, string[]>;
-  /**
-   * Display-only override for the command library UI (`web/src/CommandLibrary.tsx`).
-   * Only set for commands that accept a spoken number (see `numberNote`) — lets the
-   * library show a single "...para X" placeholder instead of every literal number
-   * word, without touching `phrases`, which still needs the real words for matching.
-   */
   displayPhrases?: Record<Language, string[]>;
-  /** Shown under the phrase list when a command accepts a number — see `NUMBER_WORDS` for the actual accepted values/step. */
   numberNote?: Record<Language, string>;
-  /**
-   * True for a command that's only ever reached via another command's
-   * redirect in `matchIntent` (e.g. direction.leftBy/rightBy) — its own
-   * `phrases` exist solely to feed `buildVoskVocabulary` and give the
-   * command library a row to render, and must be skipped by `matchIntent`'s
-   * matching loop. Without this, a marker word like "graus" would match on
-   * its own regardless of which direction was actually said.
-   */
   displayOnly?: boolean;
 }
 
 export const commands: CommandDefinition[] = [
-  // Velocidade / speed
   {
     name: "speed.increase",
     category: "speed",
@@ -101,8 +76,6 @@ export const commands: CommandDefinition[] = [
     },
   },
 
-  // Direção / direction — includes standard nautical terms (estibordo/boreste
-  // = starboard/right, bombordo = port/left).
   {
     name: "direction.left",
     category: "direction",
@@ -111,13 +84,6 @@ export const commands: CommandDefinition[] = [
       en: ["turn left", "steer left", "left", "go left", "port side"],
     },
   },
-  // Same phrases as direction.left, plus "graus"/"degrees" so Vosk's vocabulary
-  // includes them. displayOnly: true keeps matchIntent from ever matching
-  // this entry directly — otherwise the bare "graus" phrase would match on
-  // its own (e.g. "virar quinze graus direita" would wrongly hit this one
-  // before direction.right ever got a chance). This entry only exists so
-  // matchIntent's redirect below has a distinct intent name to return, and
-  // so the command library can list it as its own row with its own numberNote.
   {
     name: "direction.leftBy",
     category: "direction",
@@ -151,7 +117,6 @@ export const commands: CommandDefinition[] = [
       en: ["turn right", "steer right", "right", "go right", "starboard"],
     },
   },
-  // See the comment on direction.leftBy above — same reasoning, mirrored for the right side.
   {
     name: "direction.rightBy",
     category: "direction",
@@ -178,7 +143,6 @@ export const commands: CommandDefinition[] = [
     },
   },
 
-  // Comando / system command
   {
     name: "system.powerOn",
     category: "command",
@@ -228,8 +192,6 @@ export const commands: CommandDefinition[] = [
     },
   },
 
-  // Telemetria / telemetry — includes the bare noun (singular and plural),
-  // with and without an article, not just the full "qual a X" phrasing.
   {
     name: "status.battery",
     category: "telemetry",
@@ -280,24 +242,12 @@ export function matchIntent(transcript: string, language: Language): Intent {
   const normalized = normalizeText(transcript);
 
   for (const command of commands) {
-    if (command.displayOnly) continue; // only reachable via another command's redirect below
+    if (command.displayOnly) continue;
     const hit = command.phrases[language].some((phrase) => normalized.includes(normalizeText(phrase)));
     if (hit) {
-      // Bare "velocidade 30" / "speed 30" (no verb) lands here via
-      // status.speed's bare-word phrase — but a number right after means
-      // "set the speed", not "what's the current speed". Phrasings with a
-      // verb ("aumentar velocidade 20", "mudar velocidade para 50") never
-      // reach this: they already matched speed.increase/decrease/set above,
-      // since the speed category is checked before telemetry.
       if (command.name === "status.speed" && parseNumber(transcript, language) !== null) {
         return { name: "speed.set", confidence: 1 };
       }
-      // Same idea for direction: "virar à esquerda" alone is the fixed 10°
-      // nudge, but a spoken number anywhere in the phrase ("virar à esquerda
-      // 20", "20 graus à esquerda") means the user gave their own amount —
-      // reaching direction.leftBy/rightBy never happens via their own
-      // phrases (direction.left/right already matched first), only via this
-      // redirect.
       if (command.name === "direction.left" && parseNumber(transcript, language) !== null) {
         return { name: "direction.leftBy", confidence: 1 };
       }
@@ -311,15 +261,6 @@ export function matchIntent(transcript: string, language: Language): Intent {
   return UNKNOWN_INTENT;
 }
 
-/**
- * A word-level vocabulary for Vosk's constrained-grammar mode
- * (`KaldiRecognizer(sampleRate, grammar)`), built from every phrase in the
- * library plus the number words commands accept — restricting the decoder
- * to just these words measurably improves accuracy for a fixed command set
- * versus open-vocabulary transcription. `[unk]` is included so speech that
- * doesn't match anything here comes back as an explicit non-match instead
- * of being force-fit onto the nearest known word.
- */
 export function buildVoskVocabulary(language: Language): string[] {
   const words = new Set<string>();
   for (const command of commands) {

@@ -1,10 +1,5 @@
 import type { SpeechRecognizer, WakeWordDetector } from "../types.js";
 
-/**
- * Stand-ins for the real Edge Impulse (wake word) and Vosk (STT) WASM
- * engines. `web/` uses these until the real builds are dropped in — see
- * README.md for what to replace and where.
- */
 export class MockWakeWordDetector implements WakeWordDetector {
   private timer: ReturnType<typeof setInterval> | null = null;
 

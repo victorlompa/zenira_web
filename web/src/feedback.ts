@@ -2,7 +2,6 @@ import type { CommandFeedback } from "../../src/boatState.ts";
 import type { Strings } from "./i18n.ts";
 import type { Telemetry } from "./useTelemetry.ts";
 
-/** Turns what a command did (or why it was rejected) into the one-line status message shown under the transcript. */
 export function describeFeedback(feedback: CommandFeedback, telemetry: Telemetry, t: Strings): string {
   switch (feedback.kind) {
     case "powerOn":

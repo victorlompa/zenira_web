@@ -25,8 +25,6 @@ export function CommandHistory({ className, title, info, infoLabel, emptyLabel, 
   const pageCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
   const newestId = entries[0]?.id;
 
-  // A freshly recognized command always jumps back to the newest page,
-  // rather than leaving the user stranded on an older one.
   useEffect(() => setPage(0), [newestId]);
 
   const visibleEntries = entries.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);

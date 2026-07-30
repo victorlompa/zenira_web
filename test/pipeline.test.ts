@@ -159,7 +159,7 @@ describe("ZeniraPipeline", () => {
     expect(pipeline.getState().status).toBe("idle");
   });
 
-  describe("the ~3s listening window", () => {
+  describe("the ~4s listening window", () => {
     beforeEach(() => {
       vi.useFakeTimers();
     });
@@ -177,7 +177,7 @@ describe("ZeniraPipeline", () => {
       pipeline.triggerWakeWord();
       expect(pipeline.getState().status).toBe("listening");
 
-      vi.advanceTimersByTime(3100);
+      vi.advanceTimersByTime(4100);
 
       expect(pipeline.getState().status).toBe("armed");
       expect(wakeWord.startCount).toBe(2); // once on arm(), once again once the window closed
@@ -190,7 +190,7 @@ describe("ZeniraPipeline", () => {
 
       pipeline.arm(fakeStream());
       pipeline.triggerWakeWord();
-      vi.advanceTimersByTime(3100); // no recognizer.finish(...) call at all — pure silence
+      vi.advanceTimersByTime(4100); // no recognizer.finish(...) call at all — pure silence
 
       // Carried on the very same state update that flips status to "armed"
       // — not a separate, earlier "listening" broadcast — since React
@@ -213,11 +213,11 @@ describe("ZeniraPipeline", () => {
       pipeline.arm(fakeStream());
 
       pipeline.triggerWakeWord();
-      vi.advanceTimersByTime(3100); // session 1: silence
+      vi.advanceTimersByTime(4100); // session 1: silence
       const firstUnknown = states.mock.calls.at(-1)?.[0];
 
       pipeline.triggerWakeWord();
-      vi.advanceTimersByTime(3100); // session 2: silence again
+      vi.advanceTimersByTime(4100); // session 2: silence again
       const secondUnknown = states.mock.calls.at(-1)?.[0];
 
       // Constrained-grammar Vosk means this is the common case in practice
@@ -237,13 +237,13 @@ describe("ZeniraPipeline", () => {
       pipeline.arm(fakeStream());
       pipeline.triggerWakeWord();
 
-      // A partial arrives just before the 3s deadline each time, so the
-      // window keeps extending well past the base 3000ms.
-      for (let i = 0; i < 6; i++) {
+      // A partial arrives just before the 4s deadline each time, so the
+      // window keeps extending well past the base 4000ms.
+      for (let i = 0; i < 8; i++) {
         vi.advanceTimersByTime(600);
         recognizer.partial(`palavra ${i}`);
       }
-      expect(pipeline.getState().status).toBe("listening"); // ~3600ms elapsed, still going
+      expect(pipeline.getState().status).toBe("listening"); // ~4800ms elapsed, still going
 
       // Now speech stops — after the grace period plus the next check, it finalizes.
       vi.advanceTimersByTime(1200);
@@ -262,7 +262,7 @@ describe("ZeniraPipeline", () => {
         vi.advanceTimersByTime(300);
         recognizer.partial(`palavra ${i}`);
       }
-      // ~9s of continuous "speech" — past MAX_LISTEN_MS (7000ms) — must have stopped by now.
+      // ~9s of continuous "speech" — past MAX_LISTEN_MS (7500ms) — must have stopped by now.
       expect(pipeline.getState().status).toBe("armed");
     });
   });

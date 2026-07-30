@@ -25,7 +25,6 @@ interface BoatPanelProps extends BoatPanelLabels {
   telemetry: Telemetry;
 }
 
-// Gauge geometry: a semicircle from 180° (left, speed 0) to 0° (right, speed 100).
 const GAUGE_CENTER = { x: 100, y: 100 };
 const GAUGE_RADIUS = 80;
 
@@ -59,7 +58,7 @@ export function BoatPanel({
 }: BoatPanelProps) {
   const { voltage, current } = telemetry;
 
-  const needleRotation = (state.speed - 50) * 1.8; // -90deg (left) .. +90deg (right), 0 at speed 50
+  const needleRotation = (state.speed - 50) * 1.8;
   const rudderPercent = 50 + (state.rudder / RUDDER_MAX) * 50;
   const rudderLabel = state.rudder < -5 ? boatLeft : state.rudder > 5 ? boatRight : boatCenter;
 

@@ -1,17 +1,10 @@
 import { parseNumber } from "./numbers.js";
 import type { Language } from "./types.js";
 
-/**
- * Simplified boat state driven by recognized voice commands — for the demo
- * dashboard panel, not the real MCV25 control logic. Framework-free and
- * pure so it's testable the same way as the rest of `src/`.
- */
 export interface BoatState {
   powered: boolean;
   motorOn: boolean;
-  /** 0-100, in steps of 5 */
   speed: number;
-  /** Rudder angle in degrees, negative = left, positive = right, -90..90 in steps of 5. */
   rudder: number;
 }
 
@@ -20,7 +13,6 @@ export const INITIAL_BOAT_STATE: BoatState = { powered: false, motorOn: false, s
 const SPEED_DEFAULT_STEP = 10;
 const SPEED_MAX = 100;
 const RUDDER_DEFAULT_STEP = 10;
-/** Max rudder angle in either direction — also the gauge's visual scale in `BoatPanel.tsx`. */
 export const RUDDER_MAX = 90;
 const ROUND_TO = 5;
 
@@ -32,13 +24,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-/**
- * What happened when a command was applied — used to render a one-line
- * status message ("Velocidade alterada para 40", "Ligue o barco para ligar
- * o motor", ...). Kept separate from the message text itself so the UI can
- * translate it (and, for the `query*` kinds, fill in live telemetry values
- * that don't live in this module).
- */
 export type CommandFeedback =
   | { kind: "powerOn" }
   | { kind: "powerOff" }
@@ -62,21 +47,6 @@ export interface ApplyCommandResult {
   feedback: CommandFeedback;
 }
 
-/**
- * Applies one recognized command to the boat state. Interlocks:
- * - the motor can only start if the boat is powered on;
- * - speed can only change while both the boat and the motor are on;
- * - the rudder can only change while the boat is powered on;
- * - powering the boat off also turns the motor (and speed) off;
- * - turning the motor off does NOT power the boat off.
- *
- * Speed and direction commands work two ways: bare ("aumentar velocidade",
- * "virar à esquerda") nudges by a default step (10), while a distinct intent
- * — speed.increase/decrease still take an optional number, but direction
- * splits into direction.leftBy/rightBy (see matchIntent's redirect in
- * commands.ts) — takes a spoken number, digits or spelled out, overriding
- * that step, rounded to the nearest 5.
- */
 export function applyCommand(state: BoatState, intentName: string, transcript: string, language: Language): ApplyCommandResult {
   switch (intentName) {
     case "system.powerOn":

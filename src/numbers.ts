@@ -1,11 +1,5 @@
 import type { Language } from "./types.js";
 
-/**
- * Multiples of 5 from 0-100 — the only granularity speed/direction commands
- * accept a value at. Spelled out per language since Vosk (especially once
- * its vocabulary is constrained, see `buildVoskVocabulary` in commands.ts)
- * may transcribe a spoken number as words rather than digits.
- */
 export const NUMBER_WORDS: Record<Language, Record<string, number>> = {
   pt: {
     zero: 0,
@@ -14,20 +8,28 @@ export const NUMBER_WORDS: Record<Language, Record<string, number>> = {
     quinze: 15,
     vinte: 20,
     "vinte e cinco": 25,
+    "vinte cinco": 25,
     trinta: 30,
     "trinta e cinco": 35,
+    "trinta cinco": 35,
     quarenta: 40,
     "quarenta e cinco": 45,
+    "quarenta cinco": 45,
     cinquenta: 50,
     "cinquenta e cinco": 55,
+    "cinquenta cinco": 55,
     sessenta: 60,
     "sessenta e cinco": 65,
+    "sessenta cinco": 65,
     setenta: 70,
     "setenta e cinco": 75,
+    "setenta cinco": 75,
     oitenta: 80,
     "oitenta e cinco": 85,
+    "oitenta cinco": 85,
     noventa: 90,
     "noventa e cinco": 95,
+    "noventa cinco": 95,
     cem: 100,
   },
   en: {
@@ -55,7 +57,6 @@ export const NUMBER_WORDS: Record<Language, Record<string, number>> = {
   },
 };
 
-/** Strips accents so "está" and "esta" (or a transcript missing diacritics) still match. */
 export function normalizeText(text: string): string {
   return text
     .toLowerCase()
@@ -63,14 +64,12 @@ export function normalizeText(text: string): string {
     .replace(/[̀-ͯ]/g, "");
 }
 
-/** Finds a number in a transcript, as digits ("30") or spelled out ("trinta"/"thirty"). */
 export function parseNumber(transcript: string, language: Language): number | null {
   const normalized = normalizeText(transcript);
 
   const digitMatch = normalized.match(/\d+/);
   if (digitMatch) return Number(digitMatch[0]);
 
-  // Longest phrase first so "vinte e cinco" wins over the "vinte" it contains.
   const words = Object.entries(NUMBER_WORDS[language]).sort((a, b) => b[0].length - a[0].length);
   for (const [word, value] of words) {
     if (normalized.includes(word)) return value;

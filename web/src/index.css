@@ -420,6 +420,20 @@ body {
     display: flex;
   }
 
+  /* Each tab is the only thing on screen on mobile, so the outer "raised
+     card" chrome (.panel — same neumorphic background/shadow/radius as the
+     .card elements nested inside it — see the .shell override further down,
+     which needs to come after .shell's own base rule to win the cascade) is
+     redundant — a card inside a card inside a card. Strip it here so only
+     the inner .card sections (command groups, history items, ...) still
+     read as cards, sitting directly on the page. */
+  .panel {
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0 0.25rem 1rem;
+  }
+
   .tabbar {
     display: flex;
     position: fixed;
@@ -453,6 +467,28 @@ body {
     10px 10px 24px var(--shadow-dark),
     -10px -10px 24px var(--shadow-light);
   transition: box-shadow 0.2s ease;
+}
+
+@media (max-width: 1080px) {
+  /* Same "no redundant outer card" flattening as .panel above, but declared
+     here — after .shell's own base rule — so it actually wins the cascade
+     instead of being overridden back by it. */
+  .shell {
+    background: none;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0 0.25rem 1rem;
+    border: 2px solid transparent;
+    transition: border-color 0.2s ease, background-color 0.7s ease;
+  }
+
+  /* .shell--wake-detected normally accents the shell's own box-shadow, but
+     the shell has none to accent on mobile — a border + glow takes its
+     place instead, so the wake-word highlight still reads as a highlight. */
+  .shell--wake-detected {
+    border-color: var(--accent-start);
+    box-shadow: 0 0 20px 2px color-mix(in srgb, var(--accent-start) 45%, transparent);
+  }
 }
 
 .shell__header {

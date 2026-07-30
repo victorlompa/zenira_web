@@ -1,11 +1,5 @@
 import { MODELS_BASE_URL } from "../modelsBaseUrl.ts";
 
-/**
- * The Edge Impulse WebAssembly export is classic Emscripten glue — it
- * defines a global `Module` and `EdgeImpulseClassifier`, not an ES module —
- * so it has to be loaded as a plain <script> tag (matching Edge Impulse's
- * own example `index.html`) rather than imported through the bundler.
- */
 export interface ClassifyResult {
   anomaly: number;
   results: { label: string; value: number }[];
@@ -18,12 +12,6 @@ export interface EdgeImpulseClassifierInstance {
   getProperties(): Record<string, unknown>;
 }
 
-// `run-impulse.js` declares `class EdgeImpulseClassifier` at the top level
-// of a classic <script>. Top-level `class`/`let`/`const` create lexical
-// bindings, not properties on `window` (unlike `var`/`function`) — but
-// they're still visible as a bare global identifier to any other script
-// sharing the same realm, which our ES module code does. So this is a
-// direct ambient declaration, not `Window.EdgeImpulseClassifier`.
 declare const EdgeImpulseClassifier: new () => EdgeImpulseClassifierInstance;
 
 function loadScript(src: string): Promise<void> {
@@ -44,8 +32,6 @@ function loadClassifierScripts(): Promise<void> {
       await loadScript(`${MODELS_BASE_URL}/edge-impulse-standalone.js`);
       await loadScript(`${MODELS_BASE_URL}/run-impulse.js`);
     })();
-    // Don't leave a rejected promise cached — see voskRecognizer.ts's
-    // loadModel for why (same failure mode, same fix).
     scriptsLoaded.catch(() => {
       scriptsLoaded = null;
     });

@@ -14,12 +14,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/**
- * Random-walks battery/engine telemetry within plausible bounds — cosmetic
- * only, not part of the testable boat state, but shared between the boat
- * dashboard (which displays it) and the command feedback line (which reads
- * a live value into messages like "Tensão da bateria: 35.6 V").
- */
 export function useTelemetry(motorOn: boolean, speed: number): Telemetry {
   const [telemetry, setTelemetry] = useState<Telemetry>(INITIAL_TELEMETRY);
 

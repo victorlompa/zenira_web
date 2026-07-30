@@ -2,11 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { getSharedAudioSource } from "./audioGraph.ts";
 import { InfoPopover } from "./InfoPopover.tsx";
 
-/**
- * Draws a live waveform from the raw microphone stream — independent of
- * the wake-word/STT engines — so it's obvious from the demo page alone
- * whether the browser is actually capturing audio.
- */
 interface AudioLevelMeterProps {
   stream: MediaStream | null;
   label: string;
@@ -30,9 +25,6 @@ export function AudioLevelMeter({ stream, label, noTrackWarning, infoText, infoL
     }
     console.info("Zenira: microphone track settings", audioTracks[0].getSettings());
 
-    // Tap the stream's single shared AudioContext/source instead of
-    // creating our own — see audioGraph.ts for why running a second,
-    // independent AudioContext against the same track is unreliable.
     const { context: audioContext, source } = getSharedAudioSource(stream);
     const analyser = audioContext.createAnalyser();
     analyser.fftSize = 1024;
@@ -86,16 +78,10 @@ export function AudioLevelMeter({ stream, label, noTrackWarning, infoText, infoL
 
     return () => {
       cancelAnimationFrame(frame);
-      // The shared AudioContext may already be closed by the time this
-      // runs (e.g. a fast disarm) — disconnecting nodes on a closed
-      // context throws in some browsers, which would otherwise crash the
-      // whole render tree since nothing here catches it.
       try {
         source.disconnect(analyser);
         analyser.disconnect();
-      } catch {
-        // already torn down
-      }
+      } catch {}
     };
   }, [stream, noTrackWarning]);
 

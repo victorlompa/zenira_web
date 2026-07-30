@@ -17,14 +17,6 @@ type Tab = "library" | "zenira" | "boat" | "history";
 
 const MAX_HISTORY_ENTRIES = 25;
 
-// vosk-browser's own recommended constraints: mono, 16kHz (its models are
-// trained at that rate — capturing at it avoids relying on the browser's
-// default device rate/channel count, which is what most often looks like
-// "the mic isn't being captured" when it's really just a mismatch upstream.
-// deviceId is added on top of this when the user picks a specific mic —
-// without it, the browser's own idea of the "default" input device can
-// differ from whichever one was actually granted permission (e.g. it picks
-// a disconnected/broken virtual "wireless microphone" over a real headset).
 function micConstraints(deviceId: string): MediaStreamConstraints {
   return {
     audio: {
@@ -37,9 +29,6 @@ function micConstraints(deviceId: string): MediaStreamConstraints {
   };
 }
 
-// A short two-tone chime marking the moment the wake word fires — its own
-// throwaway AudioContext, independent of the shared one the mic pipeline
-// taps, so it doesn't interfere with (or get torn down by) that graph.
 function playWakeChime(): void {
   try {
     const ctx = new AudioContext();
@@ -60,9 +49,7 @@ function playWakeChime(): void {
     gain.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
     setTimeout(() => void ctx.close(), 500);
-  } catch {
-    // Best-effort only — a chime failing to play shouldn't break anything.
-  }
+  } catch {}
 }
 
 type Theme = "light" | "dark";
@@ -85,21 +72,11 @@ export default function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [boat, setBoat] = useState<BoatState>(INITIAL_BOAT_STATE);
   const [feedback, setFeedback] = useState<string | null>(null);
-  // Kept in the UI layer only (not the pipeline): the "Confiança da palavra
-  // de ativação" card is hidden entirely while "listening" (so the
-  // transcript card gets full attention right after the wake word fires),
-  // then reappears once back to "armed" — using the last known scores
-  // rather than starting blank, since the detector needs a moment after
-  // restarting to produce a fresh one. The pipeline itself stays stateless
-  // about this between sessions, same as before.
   const [wakeWordScores, setWakeWordScores] = useState<ClassScore[] | undefined>(undefined);
   const previousStatus = useRef<PipelineState["status"]>("idle");
   const lastLoggedResult = useRef<{ transcript: string; intent: Intent } | undefined>(undefined);
   const t = STRINGS[language];
   const telemetry = useTelemetry(boat.motorOn, boat.speed);
-  // Read inside the intent-processing effect without making it re-run on
-  // every telemetry tick (it only cares about `state`, not the ambient
-  // battery/temperature random walk).
   const telemetryRef = useRef(telemetry);
   useEffect(() => {
     telemetryRef.current = telemetry;
@@ -133,9 +110,6 @@ export default function App() {
     document.documentElement.lang = language === "pt" ? "pt-BR" : "en";
   }, [language]);
 
-  // Vosk has no single bilingual model — switching language loads a
-  // different model, so it can only happen while idle. The same picker
-  // also drives the UI's own language, not just which model gets loaded.
   const pipeline = useMemo(
     () => new ZeniraPipeline(createWakeWordDetector(), createSpeechRecognizer(language), language),
     [language],
@@ -159,20 +133,10 @@ export default function App() {
     [pipeline, t],
   );
   useEffect(() => {
-    // lastResult now rides on both "listening" and "armed" (see
-    // pipeline.ts) so it survives the end-of-session status flip — no
-    // longer gated to "listening" only, or the armed-with-result state
-    // that follows an unrecognized/silent attempt would never get logged.
     if (state.status === "idle" || !state.lastResult) return;
     if (state.lastResult === lastLoggedResult.current) return;
     lastLoggedResult.current = state.lastResult;
     const { transcript, intent } = state.lastResult;
-    // Computed once, outside of any state-updater callback: React (in
-    // StrictMode especially) may invoke an updater function more than
-    // once, so calling setFeedback from inside setBoat's updater was
-    // unreliable — sometimes leaving Output showing a stale message
-    // instead of "Comando não reconhecido" for a genuinely new, invalid
-    // command.
     const result = applyCommand(boatRef.current, intent.name, transcript, language);
     setBoat(result.state);
     setFeedback(describeFeedback(result.feedback, telemetryRef.current, t));
@@ -199,7 +163,7 @@ export default function App() {
       const stream = await navigator.mediaDevices.getUserMedia(micConstraints(micDeviceId));
       setMicStream(stream);
       pipeline.arm(stream);
-      void refreshMicDevices(); // device labels only populate once permission is granted
+      void refreshMicDevices();
     } catch {
       setError(t.micDenied);
     }
@@ -208,12 +172,6 @@ export default function App() {
   function handleDisarm() {
     pipeline.disarm();
     setFeedback(null);
-    // Only stop the tracks here; releasing the shared AudioContext is left
-    // to the [micStream] effect's cleanup below. That cleanup runs after
-    // AudioLevelMeter has unmounted (React tears down child effects before
-    // parent ones in the same commit) — closing the context here instead
-    // would race ahead of that and leave the meter disconnecting a node
-    // from an already-closed context, which throws and blanks the page.
     micStream?.getTracks().forEach((track) => track.stop());
     setMicStream(null);
   }
